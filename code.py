@@ -26,6 +26,7 @@ radio = wifi.radio
 pool = adafruit_connection_manager.get_radio_socketpool(radio)
 ssl_context = adafruit_connection_manager.get_radio_ssl_context(radio)
 
+# Remote
 mqtt_remote_server = os.getenv("mqtt_remote_server")
 mqtt_remote_username = os.getenv("mqtt_remote_username")
 mqtt_remote_key = os.getenv("mqtt_remote_key")
@@ -39,6 +40,8 @@ remote_mqtt = adafruit_minimqtt.adafruit_minimqtt.MQTT(
 )
 
 remote_feed = mqtt_remote_username + "/feeds/" + os.getenv("garage_door_remote_feed")
+
+# (Future) Local
 
 # MQTT Callback methods
 def connected(client, userdata, flags, rc):
@@ -62,6 +65,7 @@ def on_message(client, topic, message):
     # Method called when a client's subscribed feed has a new value.
     print("New message on topic {0}: {1}".format(topic, message))
 
+# All MQTT callback directives
 remote_mqtt.on_connect = connected
 remote_mqtt.on_disconnect = disconnected
 remote_mqtt.on_subscribe = subscribe
@@ -86,6 +90,8 @@ garage_door_check_wait = 10   # 3600 for normal operation, lower for testng
 
 
 while True:
+
+    # Publish message when state changes from open to closed and vice versa
     if garage_door_sensor.value:
         if garage_door_state is not garage_door_sensor.value:
             print("garage door open", garage_door_sensor.value)
