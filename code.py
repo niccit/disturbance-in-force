@@ -10,6 +10,9 @@ from adafruit_debouncer import Debouncer
 import adafruit_minimqtt.adafruit_minimqtt
 from adafruit_minimqtt.adafruit_minimqtt import MMQTTException
 import adafruit_connection_manager
+import adafruit_requests
+from adafruit_io.adafruit_io import IO_HTTP
+
 
 # WiFi
 connected = False
@@ -40,6 +43,12 @@ remote_mqtt = adafruit_minimqtt.adafruit_minimqtt.MQTT(
 )
 
 remote_feed = mqtt_remote_username + "/feeds/" + os.getenv("garage_door_remote_feed")
+weather_feed = mqtt_remote_username + "/integration/weather/2796/current"
+time_feed = mqtt_remote_username + "/feeds/" + os.getenv("date_time_remote_feed")
+tz = os.getenv("TIMEZONE")
+datetime_url = f"https://io.adafruit.com/api/v2/" + mqtt_remote_username + "/integrations/time/strftime?x-aio-key=" + mqtt_remote_key + "&tz=" + tz
+time_url = datetime_url + "&fmt=%25H%3A%25M"
+date_url = datetime_url + "&fmt=%25d%20%25B%20%25Y"
 
 # (Future) Local
 
@@ -64,6 +73,7 @@ def unsubscribe(client, userdata, topic, pid):
 def on_message(client, topic, message):
     # Method called when a client's subscribed feed has a new value.
     print("New message on topic {0}: {1}".format(topic, message))
+    remote_mqtt.publish(remote_feed, "{0}".format(message))
 
 # All MQTT callback directives
 remote_mqtt.on_connect = connected
@@ -87,7 +97,10 @@ garage_door_switch = Debouncer(garage_door_sensor)
 garage_door_state = False
 garage_door_check_wait = 10   # 3600 for normal operation, lower for testng
 
-
+# Get the weather for our dashboard
+requests = adafruit_requests.Session(pool, ssl_context)
+weather_integration = IO_HTTP(mqtt_remote_username, mqtt_remote_key, requests)
+weather_report = weather_integration.receive_weather(2796)
 
 while True:
 
@@ -102,6 +115,20 @@ while True:
             print("garage door closed", str(garage_door_sensor.value))
             remote_mqtt.publish(remote_feed, 1)
             garage_door_state = garage_door_sensor.value
+
+    current_conditions = weather_report["current"]
+    today_forecast=weather_report["forecast_minutes_5"]
+    current_date = requests.get(date_url)
+    print(current_date.text)
+    current_date.close()
+    current_time = requests.get(time_url)
+    print(current_time.text)
+    current_time.close()
+    print("It is {1} and the current temperature is {2} C.".format(current_conditions["asOf"], current_conditions["conditionCode"], current_conditions["temperature"]))
+    print("Humidity is {0}%".format(current_conditions["humidity"] * 100))
+    precipitationChance=today_forecast["precipitationChance"]
+    precipitationIntensity=today_forecast["precipitationIntensity"]
+    print("Currently, the chance of rain is {0}%".format(precipitationChance))
 
     time.sleep(garage_door_check_wait)
 
