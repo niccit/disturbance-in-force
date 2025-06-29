@@ -63,7 +63,7 @@ date_url = datetime_url + "&fmt=%25d%20%25B%20%25Y"
 def connected(client, userdata, flags, rc):
     # This function will be called when the client is connected
     # successfully to the broker.
-    print("Connected to mqtt broker {0}".format(client))
+    print("Connected to mqtt broker!")
 
 def disconnected(client, userdata, rc):
     # This method is called when the client is disconnected
@@ -80,7 +80,6 @@ def unsubscribe(client, userdata, topic, pid):
 def on_message(client, topic, message):
     # Method called when a client's subscribed feed has a new value.
     print("New message on topic {0}: {1}".format(topic, message))
-    remote_mqtt.publish(remote_feed, "{0}".format(message))
 
 # All MQTT callback directives
 remote_mqtt.on_connect = connected
@@ -145,7 +144,6 @@ def get_weather():
     temperature = current_conditions["temperature"]
     wind_speed = current_conditions["windSpeed"]            # km/hr
     wind_direction = current_conditions["windDirection"]
-    print("wind direction is", wind_direction)
     direction = get_wind_direction(wind_direction)
     humidity = (current_conditions["humidity"] * 100)
     daylight = current_conditions["daylight"]
