@@ -1,6 +1,5 @@
 # SPDX-License-Identifier: MIT
 import os
-from os import path
 from dotenv import load_dotenv
 import time
 from datetime import datetime
@@ -16,7 +15,7 @@ from pygments.lexers import q
 
 # Set testing to True to turn off publish to MQTT
 # Good for active development while code is running on a different client
-testing = True
+testing = False
 
 SCOPES = ["https://www.googleapis.com/auth/calendar.readonly"]
 
@@ -24,9 +23,9 @@ SCOPES = ["https://www.googleapis.com/auth/calendar.readonly"]
 load_dotenv()
 
 # Remote MQTT connection data
-mqtt_remote_server = os.getenv("mqtt_remote_server")
-mqtt_remote_username = os.getenv("mqtt_remote_username")
-mqtt_remote_key = os.getenv("mqtt_remote_key")
+mqtt_remote_server = os.getenv("MQTT_REMOTE_SERVER")
+mqtt_remote_username = os.getenv("MQTT_REMOTE_USERNAME")
+mqtt_remote_key = os.getenv("MQTT_REMOTE_KEY")
 
 def on_connect(client, userdata, flags, rc):
     print("Connected with result code "+str(rc))
@@ -43,8 +42,8 @@ mqtt_client.connect(mqtt_remote_server, 8883, 60)
 # --- Date & Time for the dashboard clock --- #
 
 # MQTT feeds for date and time
-date_feed = mqtt_remote_username + "/feeds/" + os.getenv("date_remote_feed")
-time_feed = mqtt_remote_username + "/feeds/" + os.getenv("time_remote_feed")
+date_feed = mqtt_remote_username + "/feeds/" + os.getenv("DATE_REMOTE_FEED")
+time_feed = mqtt_remote_username + "/feeds/" + os.getenv("TIME_REMOTE_FEED")
 
 def do_publish(feed, data):
     if not testing:
@@ -86,18 +85,18 @@ weather_report_wait = 600  # Weather doesn't change that fast, update once every
 calendar_report_wait = 21600 # Calendar shouldn't change that much, so only check every 6 hours
 
 # URLs to Openweathermap API
-weather_feed = f"https://api.openweathermap.org/data/2.5/weather?lat=" + os.getenv("latitude") +  "&lon=" + os.getenv("longitude") + "&appid=" + os.getenv("openweather_api_key") + "&units=metric"
-air_quality_feed = f"http://api.openweathermap.org/data/2.5/air_pollution?lat=" + os.getenv("latitude") + "&lon=" + os.getenv("longitude") + "&appid=" + os.getenv("openweather_api_key")
+weather_feed = f"https://api.openweathermap.org/data/2.5/weather?lat=" + os.getenv("LATITUDE") +  "&lon=" + os.getenv("LONGITUDE") + "&appid=" + os.getenv("OPENWEATHER_API_KEY") + "&units=metric"
+air_quality_feed = f"http://api.openweathermap.org/data/2.5/air_pollution?lat=" + os.getenv("LATITUDE") + "&lon=" + os.getenv("LONGITUDE") + "&appid=" + os.getenv("OPENWEATHER_API_KEY")
 # MQTT feeds for publishing data to dashboard
-weather_icon_feed = mqtt_remote_username + "/feeds/" + os.getenv("weather_icon_remote_feed")
-pub_weather_feed = mqtt_remote_username + "/feeds/" + os.getenv("weather_remote_feed")
+weather_icon_feed = mqtt_remote_username + "/feeds/" + os.getenv("WEATHER_ICON_REMOTE_FEED")
+pub_weather_feed = mqtt_remote_username + "/feeds/" + os.getenv("WEATHER_REMOTE_FEED")
 
 # Gather all the weather and air quality data and format it into a report
 last_report = None
+info_spacer = '\u25AA'
 def get_weather():
     global last_report
     degree_symbol = '\u00b0'
-    info_spacer = '\u25AA'
     daylight = False
 #
     if last_report is None or time.monotonic() > last_report + weather_report_wait:
@@ -240,11 +239,13 @@ def get_wind_direction(wind_direction):
 
     return direction
 
-stored_pressure= None
+indicator, stored_pressure_indicator, stored_pressure = None, None, None
 def get_pressure_info(pressure):
-    global stored_pressure
-    indicator = None
+    global stored_pressure, stored_pressure_indicator, indicator
     publish_pressure = round((pressure * 0.750061683), 2)
+
+    if stored_pressure is None:
+        indicator = '\u00A0'
 
     if stored_pressure is not None:
         if pressure > stored_pressure:
@@ -252,21 +253,18 @@ def get_pressure_info(pressure):
         elif pressure < stored_pressure:
             indicator = '\u2BAD'
         else:
-            indicator = '\u00A0'
-        stored_pressure = pressure
-    else:
-        indicator = '\u00A0'
-        stored_pressure = pressure
+            indicator = stored_pressure_indicator
 
+    stored_pressure = pressure
+    stored_pressure_indicator = indicator
     return indicator, publish_pressure
 
 # MQTT feed for calendar
-calendar_feed = mqtt_remote_username + "/feeds/" + os.getenv("calendar_remote_feed")
+calendar_feed = mqtt_remote_username + "/feeds/" + os.getenv("CALENDAR_REMOTE_FEED")
 
 last_calendar_check = None
 def get_shared_calendar_events():
     global last_calendar_check
-    pub_events = None
 
     if last_calendar_check is None or time.monotonic() > last_calendar_check + calendar_report_wait:
         creds = None
@@ -303,21 +301,65 @@ def get_shared_calendar_events():
             else:
                 pub_array = []
                 for event in events:
-                    start = event["start"].get("dateTime", event["start"].get("date"))
-                    event_to_add = start, event["summary"]
-                    pub_array.append(event_to_add)
+                    event_datetime = event["start"].get("dateTime")
+                    print(event_datetime)
+                    event_date, event_time = event_datetime.split("T")
+                    event_year, event_month, event_day = event_date.split("-")
+                    full_month = get_month_name(event_month)
+                    event_start_time, event_end_time = event_time.split("-")
+                    event_time_hr, event_time_min, event_time_sec = event_start_time.split(":")
+                    publish_datetime = f"{event_day} {full_month} {event_year} at {event_time_hr}:{event_time_min}"
+                    publish_event = event["summary"]
+                    pub_array.append(publish_datetime + " " + info_spacer + " " + publish_event)
 
-                publish_events = f"""\
-                    {pub_array[0]}
-                    {pub_array[1]}
-                """
-                do_publish(calendar_feed, publish_events)
+
+                if len(pub_array) == 0:
+                    message = "No upcoming events found."
+                elif len(pub_array) == 1:
+                    message = f"{pub_array[0]}"
+                else:
+                    message = f"""\
+                        {pub_array[0]}
+                        {pub_array[1]}"""
+
+                print("Publishing calendar events")
+                do_publish(calendar_feed, message)
 
         except HttpError as error:
             print(f"An error occurred: {error}")
             pass
 
         last_calendar_check = time.monotonic()
+
+pub_month = None
+def get_month_name(month):
+    global pub_month
+    if month == "12":
+        pub_month = "December"
+    if month == "11":
+        pub_month = "November"
+    if month == "10":
+        pub_month = "October"
+    if month == "09":
+        pub_month = "September"
+    if month == "08":
+        pub_month = "August"
+    if month == "07":
+        pub_month = "July"
+    if month == "06":
+        pub_month = "June"
+    if month == "05":
+        pub_month = "May"
+    if month == "04":
+        pub_month = "April"
+    if month == "03":
+        pub_month = "March"
+    if month == "02":
+        pub_month = "February"
+    if month == "01":
+        pub_month = "January"
+
+    return pub_month
 
 print("hello world, home hub is starting up!")
 while True:
