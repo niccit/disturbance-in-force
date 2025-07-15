@@ -82,7 +82,6 @@ def get_time():
 
 # Per Openweathermap API query every 10 minutes for most accurate information
 weather_report_wait = 600  # Weather doesn't change that fast, update once every 10 minutes (600)
-calendar_report_wait = 21600 # Calendar shouldn't change that much, so only check every 6 hours
 
 # URLs to Openweathermap API
 weather_feed = f"https://api.openweathermap.org/data/2.5/weather?lat=" + os.getenv("LATITUDE") +  "&lon=" + os.getenv("LONGITUDE") + "&appid=" + os.getenv("OPENWEATHER_API_KEY") + "&units=metric"
@@ -259,9 +258,16 @@ def get_pressure_info(pressure):
     stored_pressure_indicator = indicator
     return indicator, publish_pressure
 
+# -- Calendar Events -- #
+
 # MQTT feed for calendar
 calendar_feed = mqtt_remote_username + "/feeds/" + os.getenv("CALENDAR_REMOTE_FEED")
 
+calendar_report_wait = 120 # Calendar shouldn't change that much, so only check every two hours
+
+# Query a shared Google calendar
+# Grab the next two events to publish
+# Note: if you change the number of events to grab, update the for loop that builds the publish string (until I figure out how to not need to do  this)
 last_calendar_check = None
 def get_shared_calendar_events():
     global last_calendar_check
@@ -331,6 +337,7 @@ def get_shared_calendar_events():
 
         last_calendar_check = time.monotonic()
 
+# Convert provided month in numerals to the fully qualified month name
 pub_month = None
 def get_month_name(month):
     global pub_month
