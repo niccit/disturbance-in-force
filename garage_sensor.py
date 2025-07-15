@@ -42,13 +42,6 @@ remote_mqtt = adafruit_minimqtt.adafruit_minimqtt.MQTT(
 garage_door_feed = mqtt_remote_username + "/feeds/" + os.getenv("garage_door_remote_feed")
 garage_door_icon_feed = mqtt_remote_username + "/feeds/" + os.getenv("garage_door_icon_remote_feed")
 
-try:
-    print("trying to connect to remote MQTT broker")
-    remote_mqtt.connect()
-    print("connected to remote MQTT broker")
-except MMQTTException:
-    print("unable to connect to remote MQTT broker")
-    raise
 
 # Garage Door Sensor
 garage_door_sensor=digitalio.DigitalInOut(board.A3)
@@ -68,26 +61,37 @@ def get_publish_message(garage_status):
 
     return msg, msg_icon
 
+def do_publish(feed, msg):
+    try:
+        print("trying to connect to remote MQTT broker")
+        remote_mqtt.connect()
+        print("connected to remote MQTT broker")
+    except MMQTTException:
+        print("unable to connect to remote MQTT broker")
+        raise
+
+    remote_mqtt.publish(feed, msg)
+    remote_mqtt.disconnect()
+
+
 last_known_state = False
 startup = True
 print("hello world, garage door sensor coming online")
 while True:
     status = garage_door_sensor.value
 
-    if last_known_state is not status and startup is False:
-        print("Garage door state has changed, publishing to MQTT")
-        message, icon = get_publish_message(status)
-        print("message is", message, "icon is", icon)
-        remote_mqtt.publish(garage_door_icon_feed, icon)
-        remote_mqtt.publish(garage_door_feed, message)
-        last_known_state = status
-    elif startup:
+    if startup:
         print("System has started, publishing to MQTT")
         message, icon = get_publish_message(status)
-        print("message is", message, "icon is", icon)
-        remote_mqtt.publish(garage_door_icon_feed, icon)
-        remote_mqtt.publish(garage_door_feed, message)
+        do_publish(garage_door_icon_feed, icon)
+        do_publish(garage_door_feed, message)
         startup = False
+        last_known_state = status
+    elif last_known_state is not status and startup is False:
+        print("Garage door state has changed, publishing to MQTT")
+        message, icon = get_publish_message(status)
+        do_publish(garage_door_icon_feed, icon)
+        do_publish(garage_door_feed, message)
         last_known_state = status
     else:
         print("Nothing has changed, not publishing to MQTT")
