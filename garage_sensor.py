@@ -66,12 +66,12 @@ def do_publish(feed, msg):
         print("trying to connect to remote MQTT broker")
         remote_mqtt.connect()
         print("connected to remote MQTT broker")
+        remote_mqtt.publish(feed, msg)
+        remote_mqtt.disconnect()
     except MMQTTException:
         print("unable to connect to remote MQTT broker")
         raise
 
-    remote_mqtt.publish(feed, msg)
-    remote_mqtt.disconnect()
 
 
 last_known_state = False
