@@ -12,10 +12,20 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 from pygments.lexers import q
+import logging
+
 
 # Set testing to True to turn off publish to MQTT
 # Good for active development while code is running on a different client
 testing = False
+
+if testing:
+    LOG_LEVEL = logging.DEBUG
+else:
+    LOG_LEVEL = logging.ERROR
+
+logging.basicConfig(filename="hub.log", level=LOG_LEVEL)
+logger = logging.getLogger(__name__)
 
 SCOPES = ["https://www.googleapis.com/auth/calendar.readonly"]
 
@@ -27,17 +37,51 @@ mqtt_remote_server = os.getenv("MQTT_REMOTE_SERVER")
 mqtt_remote_username = os.getenv("MQTT_REMOTE_USERNAME")
 mqtt_remote_key = os.getenv("MQTT_REMOTE_KEY")
 
-def on_connect(client, userdata, flags, rc):
-    print("Connected with result code "+str(rc))
+# What to do when we connect to MQTT broker
+def on_connect(client, userdata, flags, rc, properties=None):
+    if rc == 0:
+        logger.info("Connected to MQTT Broker!")
+    else:
+        logger.error("Failed to connect, return code %d\n", rc)
 
-mqtt_client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
-mqtt_client.on_connect = on_connect
-mqtt_client.tls_set()
-mqtt_client.username_pw_set(username=mqtt_remote_username, password=mqtt_remote_key)
+# What to do when we disconnect from MQTT broker
+# Auto reconnect logic
+FIRST_RECONNECT_DELAY = 1
+RECONNECT_RATE = 2
+MAX_RECONNECT_COUNT = 12
+MAX_RECONNECT_DELAY = 60
+def on_disconnect(client, userdata, rc):
+    logger.info("Disconnected with result code: %s", rc)
+    reconnect_count, reconnect_delay = 0, FIRST_RECONNECT_DELAY
+    while reconnect_count < MAX_RECONNECT_COUNT:
+        logger.info("Reconnecting in %d seconds...", reconnect_delay)
+        time.sleep(reconnect_delay)
 
-print("Connecting to MQTT broker...")
-mqtt_client.connect(mqtt_remote_server, 8883, 60)
+        try:
+            client.reconnect()
+            logger.info("Reconnected successfully!")
+            return
+        except Exception as err:
+            logger.error("%s. Reconnect failed. Retrying...", err)
 
+        reconnect_delay *= RECONNECT_RATE
+        reconnect_delay = min(reconnect_delay, MAX_RECONNECT_DELAY)
+        reconnect_count += 1
+    print("Reconnect failed after %s attempts. Exiting...", reconnect_count)
+
+def connect_mqtt():
+    # Set Connecting Client ID
+    client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
+    client.tls_set()
+    client.username_pw_set(username=mqtt_remote_username, password=mqtt_remote_key)
+
+    client.on_connect = on_connect
+    client.disconnect = on_disconnect
+    client.connect(mqtt_remote_server, 8883, 60)
+    return client
+
+# Connect to MQTT
+mqtt_client = connect_mqtt()
 
 # --- Date & Time for the dashboard clock --- #
 
@@ -47,9 +91,12 @@ time_feed = mqtt_remote_username + "/feeds/" + os.getenv("TIME_REMOTE_FEED")
 
 def do_publish(feed, data):
     if not testing:
+        mqtt_client.loop_start()
         mqtt_client.publish(feed, data)
+        mqtt_client.loop_stop()
     else:
-        print("TESTING:", data)
+        logger.debug("TESTING:")
+        print(feed, data)
 
 
 # Get date from system clock
@@ -61,7 +108,7 @@ def get_date():
     current_date = now.strftime("%d")
     publish_date = now.strftime("%A %d %B %Y")
     if stored_date is None or stored_date != current_date:
-        print("updating calendar date on dashboard")
+        logger.info("updating calendar date on dashboard")
         do_publish(date_feed, publish_date)
         stored_date = current_date
 
@@ -74,7 +121,7 @@ def get_time():
     current_min = now.minute
     publish_time = now.strftime("%H:%M")
     if stored_time is None or stored_time != current_min:
-        print("updating time on dashboard")
+        logger.info("updating time on dashboard")
         do_publish(time_feed, publish_time)
         stored_time = current_min
 
@@ -115,7 +162,7 @@ def get_weather():
         sunset  = format_time(sunset_unix)
         air_quality, so2, so2_quality = get_air_quality()
         pressure = (weather["main"]["pressure"])
-        pressure_indicator, publish_pressure = get_pressure_info(pressure)
+        pressure_indicator, publish_pressure, rain_indicator = get_pressure_info(pressure)
         if query_time < sunset_unix:
             daylight = True
         w_icon = get_weather_icon(condition,daylight)
@@ -131,7 +178,7 @@ def get_weather():
                 sunset { sunset}
                 air quality {air_quality}
                 vog (so2) {so2} {info_spacer} {so2_quality}
-                pressure {publish_pressure} mmHg {pressure_indicator} 
+                pressure {publish_pressure} mmHg {pressure_indicator} {rain_indicator}
                 """
         except KeyError:
             weather_for_dash = f"""\
@@ -143,11 +190,11 @@ def get_weather():
                 sunset {sunset}
                 air quality {air_quality}
                 vog (so2) {so2} {info_spacer} {so2_quality}
-                pressure {publish_pressure} mmHg {pressure_indicator} 
+                pressure {publish_pressure} mmHg {pressure_indicator} {rain_indicator}
                 """
             pass
 
-        print("updating weather report on dashboard")
+        logger.info("updating weather report on dashboard")
         do_publish(weather_icon_feed, w_icon)
         do_publish(pub_weather_feed, weather_for_dash)
         last_report = time.monotonic()
@@ -238,25 +285,31 @@ def get_wind_direction(wind_direction):
 
     return direction
 
-indicator, stored_pressure_indicator, stored_pressure = None, None, None
+indicator, stored_pressure_indicator, stored_pressure, rain = None, None, None, None
 def get_pressure_info(pressure):
-    global stored_pressure, stored_pressure_indicator, indicator
+    global stored_pressure, stored_pressure_indicator, indicator, rain
     publish_pressure = round((pressure * 0.750061683), 2)
 
     if stored_pressure is None:
         indicator = '\u00A0'
 
     if stored_pressure is not None:
-        if pressure > stored_pressure:
+        if publish_pressure > stored_pressure:
             indicator = '\u2BAC'
-        elif pressure < stored_pressure:
+        elif publish_pressure < stored_pressure:
             indicator = '\u2BAD'
         else:
             indicator = stored_pressure_indicator
 
+    average_pressure = os.getenv("AVERAGE_PRESSURE")
+    if publish_pressure < int(average_pressure):
+        rain = '\u2602'
+    else:
+        rain = '\u00A0'
+
     stored_pressure = pressure
     stored_pressure_indicator = indicator
-    return indicator, publish_pressure
+    return indicator, publish_pressure, rain
 
 # -- Calendar Events -- #
 
@@ -287,7 +340,6 @@ def get_shared_calendar_events():
 
         try:
             service = build("calendar", "v3", credentials=creds)
-
             now = datetime.now(tz=timezone.utc).isoformat()
             events_result = (
                 service.events().list(
@@ -308,7 +360,6 @@ def get_shared_calendar_events():
                 pub_array = []
                 for event in events:
                     event_datetime = event["start"].get("dateTime")
-                    print(event_datetime)
                     event_date, event_time = event_datetime.split("T")
                     event_year, event_month, event_day = event_date.split("-")
                     full_month = get_month_name(event_month)
@@ -328,11 +379,11 @@ def get_shared_calendar_events():
                         {pub_array[0]}
                         {pub_array[1]}"""
 
-                print("Publishing calendar events")
+                logger.info("Publishing calendar events")
                 do_publish(calendar_feed, message)
 
         except HttpError as error:
-            print(f"An error occurred: {error}")
+            logger.error(f"An error occurred: {error}")
             pass
 
         last_calendar_check = time.monotonic()
@@ -368,7 +419,7 @@ def get_month_name(month):
 
     return pub_month
 
-print("hello world, home hub is starting up!")
+logger.debug("hello world, home hub is starting up!")
 while True:
     get_date()
     get_time()
