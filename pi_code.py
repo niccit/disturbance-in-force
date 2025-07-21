@@ -14,15 +14,18 @@ from googleapiclient.errors import HttpError
 from pygments.lexers import q
 import logging
 
-
 # Set testing to True to turn off publish to MQTT
 # Good for active development while code is running on a different client
 testing = False
 
 if testing:
     LOG_LEVEL = logging.DEBUG
+    weather_wait = 60
 else:
-    LOG_LEVEL = logging.ERROR
+    LOG_LEVEL = logging.INFO
+    weather_wait = 600  # Weather doesn't change that fast, update once every 10 minutes (600)
+
+
 
 logging.basicConfig(filename="hub.log", level=LOG_LEVEL)
 logger = logging.getLogger(__name__)
@@ -67,7 +70,7 @@ def on_disconnect(client, userdata, rc):
         reconnect_delay *= RECONNECT_RATE
         reconnect_delay = min(reconnect_delay, MAX_RECONNECT_DELAY)
         reconnect_count += 1
-    print("Reconnect failed after %s attempts. Exiting...", reconnect_count)
+    logger.error("Reconnect failed after %s attempts. Exiting...", reconnect_count)
 
 def connect_mqtt():
     # Set Connecting Client ID
@@ -96,7 +99,7 @@ def do_publish(feed, data):
         mqtt_client.loop_stop()
     else:
         logger.debug("TESTING:")
-        print(feed, data)
+        logger.debug("Would publish: Topic: %s. Payload: %s", str(feed), str(data))
 
 
 # Get date from system clock
@@ -108,7 +111,7 @@ def get_date():
     current_date = now.strftime("%d")
     publish_date = now.strftime("%A %d %B %Y")
     if stored_date is None or stored_date != current_date:
-        logger.info("updating calendar date on dashboard")
+        logger.debug("updating calendar date on dashboard")
         do_publish(date_feed, publish_date)
         stored_date = current_date
 
@@ -121,14 +124,14 @@ def get_time():
     current_min = now.minute
     publish_time = now.strftime("%H:%M")
     if stored_time is None or stored_time != current_min:
-        logger.info("updating time on dashboard")
+        logger.debug("updating time on dashboard")
         do_publish(time_feed, publish_time)
         stored_time = current_min
 
 # --- Weather, Air Quality, so2 (vog indicator) --- #
 
 # Per Openweathermap API query every 10 minutes for most accurate information
-weather_report_wait = 600  # Weather doesn't change that fast, update once every 10 minutes (600)
+weather_report_wait = weather_wait
 
 # URLs to Openweathermap API
 weather_feed = f"https://api.openweathermap.org/data/2.5/weather?lat=" + os.getenv("LATITUDE") +  "&lon=" + os.getenv("LONGITUDE") + "&appid=" + os.getenv("OPENWEATHER_API_KEY") + "&units=metric"
@@ -194,7 +197,7 @@ def get_weather():
                 """
             pass
 
-        logger.info("updating weather report on dashboard")
+        logger.debug("updating weather report on dashboard")
         do_publish(weather_icon_feed, w_icon)
         do_publish(pub_weather_feed, weather_for_dash)
         last_report = time.monotonic()
@@ -295,9 +298,9 @@ def get_pressure_info(pressure):
 
     if stored_pressure is not None:
         if publish_pressure > stored_pressure:
-            indicator = '\u2BAC'
-        elif publish_pressure < stored_pressure:
             indicator = '\u2BAD'
+        elif publish_pressure < stored_pressure:
+            indicator = '\u2BAF'
         else:
             indicator = stored_pressure_indicator
 
@@ -307,7 +310,7 @@ def get_pressure_info(pressure):
     else:
         rain = '\u00A0'
 
-    stored_pressure = pressure
+    stored_pressure = publish_pressure
     stored_pressure_indicator = indicator
     return indicator, publish_pressure, rain
 
@@ -316,7 +319,7 @@ def get_pressure_info(pressure):
 # MQTT feed for calendar
 calendar_feed = mqtt_remote_username + "/feeds/" + os.getenv("CALENDAR_REMOTE_FEED")
 
-calendar_report_wait = 120 # Calendar shouldn't change that much, so only check every two hours
+calendar_report_wait = 7200 # Calendar shouldn't change that much, so only check every two hours
 
 # Query a shared Google calendar
 # Grab the next two events to publish
@@ -324,9 +327,14 @@ calendar_report_wait = 120 # Calendar shouldn't change that much, so only check 
 last_calendar_check = None
 def get_shared_calendar_events():
     global last_calendar_check
+    events = []
 
     if last_calendar_check is None or time.monotonic() > last_calendar_check + calendar_report_wait:
+        logger.debug("It's time to check the calendar")
         creds = None
+        wait_time = 120
+        wait_multiplier = 1.2
+        attempt = 0
         if os.path.exists("token.json"):
             creds = Credentials.from_authorized_user_file("token.json", SCOPES)
         if not creds or not creds.valid:
@@ -337,54 +345,61 @@ def get_shared_calendar_events():
                 creds = flow.run_local_server(port=0)
             with open("token.json", "w") as token:
                 token.write(creds.to_json())
-
-        try:
-            service = build("calendar", "v3", credentials=creds)
-            now = datetime.now(tz=timezone.utc).isoformat()
-            events_result = (
-                service.events().list(
-                    calendarId="snipcrthka3m1mbm501fa486l4@group.calendar.google.com",
-                    timeMin=now,
-                    maxResults=2,
-                    singleEvents=True,
-                    orderBy="startTime",
+        for attempt in range(5):
+            try:
+                service = build("calendar", "v3", credentials=creds)
+                now = datetime.now(tz=timezone.utc).isoformat()
+                events_result = (
+                    service.events().list(
+                        calendarId="snipcrthka3m1mbm501fa486l4@group.calendar.google.com",
+                        timeMin=now,
+                        maxResults=2,
+                        singleEvents=True,
+                        orderBy="startTime",
+                    )
+                    .execute()
                 )
-                .execute()
-            )
-            events = events_result.get("items", [])
-
-            if not events:
-                pub_events = "No upcoming events found."
-                do_publish(calendar_feed, pub_events)
-            else:
-                pub_array = []
-                for event in events:
-                    event_datetime = event["start"].get("dateTime")
-                    event_date, event_time = event_datetime.split("T")
-                    event_year, event_month, event_day = event_date.split("-")
-                    full_month = get_month_name(event_month)
-                    event_start_time, event_end_time = event_time.split("-")
-                    event_time_hr, event_time_min, event_time_sec = event_start_time.split(":")
-                    publish_datetime = f"{event_day} {full_month} {event_year} at {event_time_hr}:{event_time_min}"
-                    publish_event = event["summary"]
-                    pub_array.append(publish_datetime + " " + info_spacer + " " + publish_event)
-
-
-                if len(pub_array) == 0:
-                    message = "No upcoming events found."
-                elif len(pub_array) == 1:
-                    message = f"{pub_array[0]}"
+                events = events_result.get("items", [])
+                break
+            except HttpError as error:
+                logger.error(f"An error occurred: {error}, retrying")
+                if attempt == 0:
+                    time.sleep(wait_time)
+                elif attempt <= 4:
+                    time.sleep(wait_time*wait_multiplier)
+                    wait_time = wait_time*wait_multiplier
                 else:
-                    message = f"""\
-                        {pub_array[0]}
-                        {pub_array[1]}"""
+                    logger.error("unable to retrieve events, abandoning")
 
-                logger.info("Publishing calendar events")
-                do_publish(calendar_feed, message)
 
-        except HttpError as error:
-            logger.error(f"An error occurred: {error}")
-            pass
+        if not events:
+            pub_events = "No upcoming events found."
+            do_publish(calendar_feed, pub_events)
+        else:
+            pub_array = []
+            for event in events:
+                event_datetime = event["start"].get("dateTime")
+                event_date, event_time = event_datetime.split("T")
+                event_year, event_month, event_day = event_date.split("-")
+                full_month = get_month_name(event_month)
+                event_start_time, event_end_time = event_time.split("-")
+                event_time_hr, event_time_min, event_time_sec = event_start_time.split(":")
+                publish_datetime = f"{event_day} {full_month} {event_year} at {event_time_hr}:{event_time_min}"
+                publish_event = event["summary"]
+                pub_array.append(publish_datetime + " " + info_spacer + " " + publish_event)
+
+
+            if len(pub_array) == 0:
+                message = "No upcoming events found."
+            elif len(pub_array) == 1:
+                message = f"{pub_array[0]}"
+            else:
+                message = f"""\
+                    {pub_array[0]}
+                    {pub_array[1]}"""
+
+            logger.debug("Publishing calendar events")
+            do_publish(calendar_feed, message)
 
         last_calendar_check = time.monotonic()
 
@@ -419,7 +434,7 @@ def get_month_name(month):
 
     return pub_month
 
-logger.debug("hello world, home hub is starting up!")
+logger.info("hello world, home hub is starting up!")
 while True:
     get_date()
     get_time()
