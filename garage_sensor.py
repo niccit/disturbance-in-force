@@ -14,7 +14,7 @@ import adafruit_connection_manager
 connected = False
 while not connected:
     try:
-        wifi.radio.connect(os.getenv("CIRCUITPYTHON_WIFI_SSID"), os.getenv("CIRCUITPYTHON_WIFI_PASSWORD"))
+        wifi.radio.connect(os.getenv("CIRCUITPY_WIFI_SSID"), os.getenv("CIRCUITPY_WIFI_PASSWORD"))
         print("Connected to WiFi", str(wifi.radio.ap_info.ssid) + "!")
         connected = True
     except ConnectionError:
