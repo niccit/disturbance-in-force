@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: MIT
 import os
-from dotenv import load_dotenv
 import time
+import requests
+from dotenv import load_dotenv
 from datetime import datetime
 from datetime import timezone
 import paho.mqtt.client as mqtt
-import requests
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
@@ -15,9 +15,10 @@ from pygments.lexers import q
 import logging
 
 # Set testing to True to turn off publish to MQTT
-# Good for active development while code is running on a different client
+# Good for active development while code is running
 testing = False
 
+# Set the log level based on if we're testing or not
 if testing:
     LOG_LEVEL = logging.DEBUG
     weather_wait = 60
@@ -25,29 +26,31 @@ else:
     LOG_LEVEL = logging.INFO
     weather_wait = 600  # Weather doesn't change that fast, update once every 10 minutes (600)
 
-
-
+# Set up the logger
 logging.basicConfig(filename="hub.log", level=LOG_LEVEL)
 logger = logging.getLogger(__name__)
 
-SCOPES = ["https://www.googleapis.com/auth/calendar.readonly"]
-
 # load environment variables
 load_dotenv()
+
+# list of feeds to subscribe to
+feeds_list = []
+
 
 # Remote MQTT connection data
 mqtt_remote_server = os.getenv("MQTT_REMOTE_SERVER")
 mqtt_remote_username = os.getenv("MQTT_REMOTE_USERNAME")
 mqtt_remote_key = os.getenv("MQTT_REMOTE_KEY")
 
-# What to do when we connect to MQTT broker
+
+# Connect method for MQTT
 def on_connect(client, userdata, flags, rc, properties=None):
     if rc == 0:
         logger.info("Connected to MQTT Broker!")
     else:
         logger.error("Failed to connect, return code %d\n", rc)
 
-# What to do when we disconnect from MQTT broker
+# Disconnect method for MQTT
 # Auto reconnect logic
 FIRST_RECONNECT_DELAY = 1
 RECONNECT_RATE = 2
@@ -72,6 +75,7 @@ def on_disconnect(client, userdata, rc):
         reconnect_count += 1
     logger.error("Reconnect failed after %s attempts. Exiting...", reconnect_count)
 
+# Connect to the specified MQTT server
 def connect_mqtt():
     # Set Connecting Client ID
     client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
@@ -83,24 +87,35 @@ def connect_mqtt():
     client.connect(mqtt_remote_server, 8883, 60)
     return client
 
+# Subscribe logic when subscribing to an MQTT feed
+def subscribe(client, topic):
+    def on_message(client, userdata, msg):
+        global garage_door_state
+        received_msg = msg.payload.decode("utf-8")
+        logger.debug("message payload is %s for topic %s", received_msg, msg.topic)
+        if "garage" in received_msg.lower():
+            garage_door_state = received_msg
+            logger.debug("garage door state is %s", garage_door_state)
+
+    client.subscribe(topic)
+    client.on_message = on_message
+
+# MQTT feeds - subs
+garage_notice = mqtt_remote_username + "/feeds/" + os.getenv("GARAGE_ALERT")
+garage_data_source = mqtt_remote_username + "/feeds/" + os.getenv("GARAGE_DOOR_REMOTE_FEED")
+feeds_list.append(garage_data_source)
+
 # Connect to MQTT
-mqtt_client = connect_mqtt()
+pub_mqtt_client = connect_mqtt()
+pub_mqtt_client.loop_start()
+sub_mqtt_client = connect_mqtt()
+
 
 # --- Date & Time for the dashboard clock --- #
 
-# MQTT feeds for date and time
+# MQTT feeds for date and time - pub
 date_feed = mqtt_remote_username + "/feeds/" + os.getenv("DATE_REMOTE_FEED")
 time_feed = mqtt_remote_username + "/feeds/" + os.getenv("TIME_REMOTE_FEED")
-
-def do_publish(feed, data):
-    if not testing:
-        mqtt_client.loop_start()
-        mqtt_client.publish(feed, data)
-        mqtt_client.loop_stop()
-    else:
-        logger.debug("TESTING:")
-        logger.debug("Would publish: Topic: %s. Payload: %s", str(feed), str(data))
-
 
 # Get date from system clock
 # Store the date (1-31) and if the new query is different update the date to MQTT
@@ -135,8 +150,8 @@ weather_report_wait = weather_wait
 
 # URLs to Openweathermap API
 weather_feed = f"https://api.openweathermap.org/data/2.5/weather?lat=" + os.getenv("LATITUDE") +  "&lon=" + os.getenv("LONGITUDE") + "&appid=" + os.getenv("OPENWEATHER_API_KEY") + "&units=metric"
-air_quality_feed = f"http://api.openweathermap.org/data/2.5/air_pollution?lat=" + os.getenv("LATITUDE") + "&lon=" + os.getenv("LONGITUDE") + "&appid=" + os.getenv("OPENWEATHER_API_KEY")
-# MQTT feeds for publishing data to dashboard
+air_quality_feed = f"https://api.openweathermap.org/data/2.5/air_pollution?lat=" + os.getenv("LATITUDE") + "&lon=" + os.getenv("LONGITUDE") + "&appid=" + os.getenv("OPENWEATHER_API_KEY")
+# MQTT feeds for publishing data to dashboard - pub
 weather_icon_feed = mqtt_remote_username + "/feeds/" + os.getenv("WEATHER_ICON_REMOTE_FEED")
 pub_weather_feed = mqtt_remote_username + "/feeds/" + os.getenv("WEATHER_REMOTE_FEED")
 
@@ -147,7 +162,6 @@ def get_weather():
     global last_report
     degree_symbol = '\u00b0'
     daylight = False
-#
     if last_report is None or time.monotonic() > last_report + weather_report_wait:
         weather_request = requests.get(weather_feed)
         weather = weather_request.json()
@@ -202,9 +216,105 @@ def get_weather():
         do_publish(pub_weather_feed, weather_for_dash)
         last_report = time.monotonic()
 
-# API call returns the timestamp in Unix time format
-# This method will reformat it to local time
-# Using for: local times for sunrise/sunset
+
+# --- Calendar Events --- #
+
+# MQTT feed for calendar - pub
+calendar_feed = mqtt_remote_username + "/feeds/" + os.getenv("CALENDAR_REMOTE_FEED")
+
+SCOPES = ["https://www.googleapis.com/auth/calendar.readonly"]
+calendar_report_wait = 7200 # Calendar shouldn't change that much, so only check every two hours
+
+# Query a shared Google calendar
+# Grab the next two events to publish
+# Note: if you change the number of events to grab, update the for loop that builds the publish string (until I figure out how to not need to do  this)
+last_calendar_check = None
+def get_shared_calendar_events():
+    global last_calendar_check
+    events = []
+    if last_calendar_check is None or time.monotonic() > last_calendar_check + calendar_report_wait:
+        logger.debug("It's time to check the calendar")
+        creds = None
+        wait_time = 120
+        wait_multiplier = 1.2
+        if os.path.exists("token.json"):
+            creds = Credentials.from_authorized_user_file("token.json", SCOPES)
+        if not creds or not creds.valid:
+            if creds and creds.expired and creds.refresh_token:
+                creds.refresh(Request())
+            else:
+                flow = InstalledAppFlow.from_client_secrets_file("credentials.json", SCOPES)
+                creds = flow.run_local_server(port=0)
+            with open("token.json", "w") as token:
+                token.write(creds.to_json())
+        for attempt in range(5):
+            try:
+                service = build("calendar", "v3", credentials=creds)
+                now = datetime.now(tz=timezone.utc).isoformat()
+                events_result = (
+                    service.events().list(
+                        calendarId="snipcrthka3m1mbm501fa486l4@group.calendar.google.com",
+                        timeMin=now,
+                        maxResults=2,
+                        singleEvents=True,
+                        orderBy="startTime",
+                    )
+                    .execute()
+                )
+                events = events_result.get("items", [])
+                break
+            except HttpError as error:
+                logger.error(f"An error occurred: {error}, retrying")
+                if attempt == 0:
+                    time.sleep(wait_time)
+                elif attempt <= 4:
+                    time.sleep(wait_time*wait_multiplier)
+                    wait_time = wait_time*wait_multiplier
+                else:
+                    logger.error("unable to retrieve events, abandoning")
+            attempt += 1
+
+        if not events:
+            pub_events = "No upcoming events found."
+            do_publish(calendar_feed, pub_events)
+        else:
+            pub_array = []
+            for event in events:
+                event_datetime = event["start"].get("dateTime")
+                event_date, event_time = event_datetime.split("T")
+                event_year, event_month, event_day = event_date.split("-")
+                full_month = get_month_name(event_month)
+                event_start_time, event_end_time = event_time.split("-")
+                event_time_hr, event_time_min, event_time_sec = event_start_time.split(":")
+                publish_datetime = f"{event_day} {full_month} {event_year} at {event_time_hr}:{event_time_min}"
+                publish_event = event["summary"]
+                pub_array.append(publish_datetime + " " + info_spacer + " " + publish_event)
+
+
+            if len(pub_array) == 1:
+                message = f"{pub_array[0]}"
+            else:
+                message = f"""\
+                    {pub_array[0]}
+                    {pub_array[1]}"""
+
+            logger.debug("Publishing calendar events")
+            do_publish(calendar_feed, message)
+
+        last_calendar_check = time.monotonic()
+
+# --- Supporting task handling methods --- #
+
+# Publish to MQTT
+def do_publish(feed, data):
+    if not testing:
+        logger.info("I am publishing %s to %s", data, feed)
+        pub_mqtt_client.publish(feed, data)
+    else:
+        logger.debug("TESTING:")
+        logger.debug("Would publish: Topic: %s. Payload: %s", str(feed), str(data))
+
+# Will properly format a UNIX timestamp into a readable value
 def format_time(timestamp):
     local_time = time.localtime(timestamp)
     return "{:02d}:{:02d}:{:02d}".format(local_time.tm_hour, local_time.tm_min, local_time.tm_sec)
@@ -267,7 +377,7 @@ def get_air_quality():
 
     return air_quality, so2, so2_quality
 
-# Return unicode character for direction based on degrees
+# Return UNICODE character for direction based on degrees
 def get_wind_direction(wind_direction):
     if 0 <= wind_direction <= 44:
         direction = '\u2191'
@@ -288,6 +398,8 @@ def get_wind_direction(wind_direction):
 
     return direction
 
+# Get barometric pressure information for weather block
+# If pressure drops below average pressure, indicate it might rain
 indicator, stored_pressure_indicator, stored_pressure, rain = None, None, None, None
 def get_pressure_info(pressure):
     global stored_pressure, stored_pressure_indicator, indicator, rain
@@ -313,95 +425,6 @@ def get_pressure_info(pressure):
     stored_pressure = publish_pressure
     stored_pressure_indicator = indicator
     return indicator, publish_pressure, rain
-
-# -- Calendar Events -- #
-
-# MQTT feed for calendar
-calendar_feed = mqtt_remote_username + "/feeds/" + os.getenv("CALENDAR_REMOTE_FEED")
-
-calendar_report_wait = 7200 # Calendar shouldn't change that much, so only check every two hours
-
-# Query a shared Google calendar
-# Grab the next two events to publish
-# Note: if you change the number of events to grab, update the for loop that builds the publish string (until I figure out how to not need to do  this)
-last_calendar_check = None
-def get_shared_calendar_events():
-    global last_calendar_check
-    events = []
-
-    if last_calendar_check is None or time.monotonic() > last_calendar_check + calendar_report_wait:
-        logger.debug("It's time to check the calendar")
-        creds = None
-        wait_time = 120
-        wait_multiplier = 1.2
-        attempt = 0
-        if os.path.exists("token.json"):
-            creds = Credentials.from_authorized_user_file("token.json", SCOPES)
-        if not creds or not creds.valid:
-            if creds and creds.expired and creds.refresh_token:
-                creds.refresh(Request())
-            else:
-                flow = InstalledAppFlow.from_client_secrets_file("credentials.json", SCOPES)
-                creds = flow.run_local_server(port=0)
-            with open("token.json", "w") as token:
-                token.write(creds.to_json())
-        for attempt in range(5):
-            try:
-                service = build("calendar", "v3", credentials=creds)
-                now = datetime.now(tz=timezone.utc).isoformat()
-                events_result = (
-                    service.events().list(
-                        calendarId="snipcrthka3m1mbm501fa486l4@group.calendar.google.com",
-                        timeMin=now,
-                        maxResults=2,
-                        singleEvents=True,
-                        orderBy="startTime",
-                    )
-                    .execute()
-                )
-                events = events_result.get("items", [])
-                break
-            except HttpError as error:
-                logger.error(f"An error occurred: {error}, retrying")
-                if attempt == 0:
-                    time.sleep(wait_time)
-                elif attempt <= 4:
-                    time.sleep(wait_time*wait_multiplier)
-                    wait_time = wait_time*wait_multiplier
-                else:
-                    logger.error("unable to retrieve events, abandoning")
-
-
-        if not events:
-            pub_events = "No upcoming events found."
-            do_publish(calendar_feed, pub_events)
-        else:
-            pub_array = []
-            for event in events:
-                event_datetime = event["start"].get("dateTime")
-                event_date, event_time = event_datetime.split("T")
-                event_year, event_month, event_day = event_date.split("-")
-                full_month = get_month_name(event_month)
-                event_start_time, event_end_time = event_time.split("-")
-                event_time_hr, event_time_min, event_time_sec = event_start_time.split(":")
-                publish_datetime = f"{event_day} {full_month} {event_year} at {event_time_hr}:{event_time_min}"
-                publish_event = event["summary"]
-                pub_array.append(publish_datetime + " " + info_spacer + " " + publish_event)
-
-
-            if len(pub_array) == 0:
-                message = "No upcoming events found."
-            elif len(pub_array) == 1:
-                message = f"{pub_array[0]}"
-            else:
-                message = f"""\
-                    {pub_array[0]}
-                    {pub_array[1]}"""
-
-            logger.debug("Publishing calendar events")
-            do_publish(calendar_feed, message)
-
-        last_calendar_check = time.monotonic()
 
 # Convert provided month in numerals to the fully qualified month name
 pub_month = None
@@ -434,11 +457,70 @@ def get_month_name(month):
 
     return pub_month
 
+# Subscribe to the feeds we need to take action
+def sub_feeds():
+    for feed in feeds_list:
+        subscribe(sub_mqtt_client, feed)
+        logger.info("subscribed to %s" % feed)
+
+    sub_mqtt_client.loop_start()
+
+# If the time is after 8PM and the garage door is still in an open state
+# Email me so that I know to close it, just in case I don't look at the home hub
+notified = False
+close_time = os.getenv("GARAGE_ALERT_TIME")
+def monitor_garage_notification():
+    global notified, close_time
+    now = datetime.now()
+    cur_time = now.time().strftime("%H:%M")
+
+    # Publish that the garage door is open after 20:00
+    # This will send an email alerting the need to close the door
+    if "open" in garage_door_state:
+        if cur_time > close_time and not notified:
+            do_publish(garage_notice, 1)
+            notified = True
+
+    # If time is not within the hours door should be closed
+    # Reset to notified to False
+    if cur_time < close_time and notified and "open" in garage_door_state:
+        logger.info("resetting close garage notification status")
+        notified = False
+
+# Query the garage door feed to set initial state on startup
+garage_door_state = 0
+def set_current_garage_door_state():
+    global garage_door_state
+    garage_info_url = "https://" + mqtt_remote_server + "/api/v2/" + mqtt_remote_username + "/feeds/" + os.getenv(
+        "GARAGE_DOOR_REMOTE_FEED") + "?x-aio-key=" + mqtt_remote_key
+    garage_door = requests.get(garage_info_url)
+    door_info = garage_door.json()
+    garage_door_state = door_info['last_value']
+    monitor_garage_notification()
+    logger.debug("garage door state: %s", garage_door_state)
+
+# --- The magic begins here --- #
+
+# Log a message indicating if we're in test mode
+if testing:
+    logger.debug("TESTING")
+else:
+    logger.info("LIVE")
+
+# Subscribe to any feeds
+if feeds_list:
+    logger.info("I have feeds to subscribe to")
+    sub_feeds()
+
+# store initial state of garage door
+set_current_garage_door_state()
+
 logger.info("hello world, home hub is starting up!")
 while True:
     get_date()
     get_time()
     get_weather()
     get_shared_calendar_events()
+    monitor_garage_notification()
 
     time.sleep(0.5)
