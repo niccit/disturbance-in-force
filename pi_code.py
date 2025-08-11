@@ -124,7 +124,7 @@ def get_date():
     global stored_date
     now = datetime.now()
     current_date = now.strftime("%d")
-    publish_date = now.strftime("%A %d %B %Y")
+    publish_date = now.strftime("%A %d %b %Y")
     if stored_date is None or stored_date != current_date:
         logger.debug("updating calendar date on dashboard")
         do_publish(date_feed, publish_date)
@@ -280,15 +280,23 @@ def get_shared_calendar_events():
         else:
             pub_array = []
             for event in events:
-                event_datetime = event["start"].get("dateTime")
-                event_date, event_time = event_datetime.split("T")
-                event_year, event_month, event_day = event_date.split("-")
-                full_month = get_month_name(event_month)
-                event_start_time, event_end_time = event_time.split("-")
-                event_time_hr, event_time_min, event_time_sec = event_start_time.split(":")
-                publish_datetime = f"{event_day} {full_month} {event_year} at {event_time_hr}:{event_time_min}"
                 publish_event = event["summary"]
-                pub_array.append(publish_datetime + " " + info_spacer + " " + publish_event)
+                event_datetime = event["start"].get("dateTime")
+                if event_datetime is not None:
+                    event_date, event_time = event_datetime.split("T")
+                    event_year, event_month, event_day = event_date.split("-")
+                    full_month = get_month_name(event_month)
+                    event_start_time, event_end_time = event_time.split("-")
+                    event_time_hr, event_time_min, event_time_sec = event_start_time.split(":")
+                    publish_datetime = f"{event_day} {full_month} {event_year} at {event_time_hr}:{event_time_min}"
+                    pub_array.append(publish_datetime + " " + info_spacer + " " + publish_event)
+                else:
+                    event_date = event["start"].get("date")
+                    event_year, event_month, event_day = event_date.split("-")
+                    full_month = get_month_name(event_month)
+                    publish_date = f"{event_day} {full_month} {event_year}"
+                    pub_array.append(publish_date + " " + info_spacer + " " + publish_event)
+
 
 
             if len(pub_array) == 1:
@@ -308,7 +316,7 @@ def get_shared_calendar_events():
 # Publish to MQTT
 def do_publish(feed, data):
     if not testing:
-        logger.info("I am publishing %s to %s", data, feed)
+        logger.debug("I am publishing %s to %s", data, feed)
         pub_mqtt_client.publish(feed, data)
     else:
         logger.debug("TESTING:")
@@ -427,33 +435,32 @@ def get_pressure_info(pressure):
     return indicator, publish_pressure, rain
 
 # Convert provided month in numerals to the fully qualified month name
-pub_month = None
 def get_month_name(month):
-    global pub_month
+    pub_month = None
     if month == "12":
-        pub_month = "December"
+        pub_month = "Dec"
     if month == "11":
-        pub_month = "November"
+        pub_month = "Nov"
     if month == "10":
-        pub_month = "October"
+        pub_month = "Oct"
     if month == "09":
-        pub_month = "September"
+        pub_month = "Sept"
     if month == "08":
-        pub_month = "August"
+        pub_month = "Aug"
     if month == "07":
-        pub_month = "July"
+        pub_month = "Jul"
     if month == "06":
-        pub_month = "June"
+        pub_month = "Jun"
     if month == "05":
         pub_month = "May"
     if month == "04":
-        pub_month = "April"
+        pub_month = "Apr"
     if month == "03":
-        pub_month = "March"
+        pub_month = "Mar"
     if month == "02":
-        pub_month = "February"
+        pub_month = "Feb"
     if month == "01":
-        pub_month = "January"
+        pub_month = "Jan"
 
     return pub_month
 
