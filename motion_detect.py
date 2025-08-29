@@ -8,6 +8,7 @@ import adafruit_minimqtt.adafruit_minimqtt
 from adafruit_minimqtt.adafruit_minimqtt import MMQTTException
 import adafruit_connection_manager
 import adafruit_logging
+import adafruit_ntp
 
 # --- Setup and Configuration --- #
 
@@ -57,14 +58,16 @@ def connect(mqtt_client, userdata, flags, rc):
     # successfully to the broker.
     logger.info("Connected to MQTT Broker!")
     logger.debug(f"Flags: {flags}\n RC: {rc}")
+    my_mqtt.subscribe(recording_feed)
+    logger.info(f"Subscribed to {recording_feed}")
 
 def disconnect(mqtt_client, userdata, rc):
     # This method is called when the mqtt_client disconnects
     # from the broker.
+    timestamp = get_time()
     logger.info("Disconnected from MQTT Broker!")
-    if rc == 1:
-        my_mqtt.connect()
-        my_mqtt.subscribe(recording_feed)
+    logger.info(f"{timestamp} Disconnected from MQTT Broker!")
+    my_mqtt.reconnect()
 
 def subscribe(mqtt_client, userdata, topic, granted_qos):
     # This method is called when the mqtt_client subscribes to a new feed.
@@ -80,7 +83,8 @@ def publish(mqtt_client, userdata, topic, pid):
 
 def message(client, topic, message):
     global is_recording
-    logger.debug(f"New message on topic {topic}: {message}")
+    timestamp = get_time()
+    logger.debug(f"{timestamp} New message on topic {topic}: {message}")
     if "recording" in topic:
         if message is "1":
             is_recording = True
@@ -110,23 +114,35 @@ my_mqtt.on_message = message
 # --- Non-MQTT Related Methods --- #
 
 def do_publish(feed, msg):
+    timestamp = get_time()
     if testing:
         logger.info(f"Testing: would publish {msg} to {feed}")
     else:
-        logger.info(f"preparing to publish {msg} to {feed}")
+        logger.info(f"{timestamp} preparing to publish {msg} to {feed}")
         try:
             my_mqtt.publish(feed, msg)
         except MMQTTException:
             print("unable to connect to remote MQTT broker")
             raise
 
+def get_time():
+    try:
+        ntp_datetime = adafruit_ntp.NTP(pool, tz_offset=-10)
+        now = ntp_datetime.datetime
+        now_date = "{:02}{:02}{:04}".format(now.tm_mday, now.tm_mon, now.tm_year)
+        now_time = "{:02}:{:02}:{:02}".format(now.tm_hour, now.tm_min, now.tm_sec)
+        my_timestamp = f"{now_date}-{now_time}"
+    except OSError as e:
+        my_timestamp = "00000000-00:00:00"
+
+    return my_timestamp
+
+
 # --- Pre start setup --- #
+
 is_motion_detect = False
 
 my_mqtt.connect()
-
-my_mqtt.connect()
-my_mqtt.subscribe(recording_feed)
 
 # --- Startup --- #
 logger.info("motion detector online")
