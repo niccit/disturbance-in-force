@@ -12,8 +12,6 @@ import adafruit_ntp
 
 # --- Setup and Configuration --- #
 
-is_recording = False
-
 # Logging
 logger = adafruit_logging.getLogger('motion_detect')
 
@@ -53,7 +51,7 @@ motion_feed = os.getenv("motion_detect_local_feed")
 recording_feed = os.getenv("local_recording_on_feed")
 
 # MQTT specific helpers
-def connect(mqtt_client, userdata, flags, rc):
+def on_connect(mqtt_client, userdata, flags, rc):
     # This function will be called when the mqtt_client is connected
     # successfully to the broker.
     logger.info("Connected to MQTT Broker!")
@@ -61,35 +59,46 @@ def connect(mqtt_client, userdata, flags, rc):
     my_mqtt.subscribe(recording_feed)
     logger.info(f"Subscribed to {recording_feed}")
 
-def disconnect(mqtt_client, userdata, rc):
+def on_disconnect(mqtt_client, userdata, rc):
     # This method is called when the mqtt_client disconnects
     # from the broker.
-    timestamp = get_time()
     logger.info("Disconnected from MQTT Broker!")
-    logger.info(f"{timestamp} Disconnected from MQTT Broker!")
-    my_mqtt.reconnect()
+    logger.info(f"Disconnected from MQTT Broker!")
+    counter = 0
+    while counter <= 10:
+        try:
+            my_mqtt.reconnect()
+            counter = 11
+        except MMQTTException:
+            counter += 1
+            time.sleep(1)
+            pass
 
-def subscribe(mqtt_client, userdata, topic, granted_qos):
+def on_subscribe(mqtt_client, userdata, topic, granted_qos):
     # This method is called when the mqtt_client subscribes to a new feed.
     logger.info(f"Subscribed to {topic} with QOS level {granted_qos}")
 
-def unsubscribe(mqtt_client, userdata, topic, pid):
+def on_unsubscribe(mqtt_client, userdata, topic, pid):
     # This method is called when the mqtt_client unsubscribes from a feed.
     logger.info(f"Unsubscribed from {topic} with PID {pid}")
 
-def publish(mqtt_client, userdata, topic, pid):
+def on_publish(mqtt_client, userdata, topic, pid):
     # This method is called when the mqtt_client publishes data to a feed.
     logger.info(f"Published to {topic} with PID {pid}")
 
-def message(client, topic, message):
+is_recording = False
+def on_message(client, topic, message):
     global is_recording
-    timestamp = get_time()
-    logger.debug(f"{timestamp} New message on topic {topic}: {message}")
+    logger.info(f"New message on topic {topic}: {message}")
     if "recording" in topic:
         if message is "1":
-            is_recording = True
-        else:
-            is_recording = False
+            if not is_recording:
+                is_recording = True
+        if message is "0":
+            if is_recording:
+                is_recording = False
+
+        logger.info(f"recording state={is_recording}")
 
 ssl_context = adafruit_connection_manager.get_radio_ssl_context(radio)
 
@@ -104,26 +113,28 @@ my_mqtt = adafruit_minimqtt.adafruit_minimqtt.MQTT(
 )
 
 # Connect callback handlers to mqtt_client
-my_mqtt.on_connect = connect
-my_mqtt.on_disconnect = disconnect
-my_mqtt.on_subscribe = subscribe
-my_mqtt.on_unsubscribe = unsubscribe
-my_mqtt.on_publish = publish
-my_mqtt.on_message = message
+my_mqtt.on_connect = on_connect
+my_mqtt.on_disconnect = on_disconnect
+my_mqtt.on_subscribe = on_subscribe
+my_mqtt.on_unsubscribe = on_unsubscribe
+my_mqtt.on_publish = on_publish
+my_mqtt.on_message = on_message
 
 # --- Non-MQTT Related Methods --- #
 
 def do_publish(feed, msg):
-    timestamp = get_time()
     if testing:
         logger.info(f"Testing: would publish {msg} to {feed}")
     else:
-        logger.info(f"{timestamp} preparing to publish {msg} to {feed}")
+        logger.info(f"preparing to publish {msg} to {feed}")
         try:
             my_mqtt.publish(feed, msg)
         except MMQTTException:
-            print("unable to connect to remote MQTT broker")
-            raise
+            print("unable to connect to remote MQTT broker, message not sent")
+            pass
+        except BrokenPipeError:
+            my_mqtt.disconnect()
+            my_mqtt.publish(feed, msg)
 
 def get_time():
     try:
@@ -134,26 +145,37 @@ def get_time():
         my_timestamp = f"{now_date}-{now_time}"
     except OSError as e:
         my_timestamp = "00000000-00:00:00"
+    except OverflowError as e:
+        my_timestamp = "00000000-00:00:00"
 
     return my_timestamp
 
+def motion_detected():
+    if not is_recording:
+        logger.info(f"motion detected and we are not currently recording")
+        do_publish(motion_feed, 1)
+        time.sleep(5)
+        do_publish(motion_feed, 0)
+    else:
+        logger.info(f"we are recording, nothing more to do")
 
 # --- Pre start setup --- #
-
-is_motion_detect = False
-
 my_mqtt.connect()
+
+do_publish(motion_feed, 0)
 
 # --- Startup --- #
 logger.info("motion detector online")
 while True:
-    my_mqtt.loop(timeout=5)
-    if pir.value is not is_motion_detect and not is_recording:
-        if pir.value:
-            do_publish(motion_feed, 1)
-            logger.debug("motion detected")
-            is_motion_detect = True
-        else:
-            is_motion_detect = False
+    try:
+        my_mqtt.loop(timeout=5)
+    except MMQTTException:
+        logger.error("MMQT unavailable, will reconnect")
+        my_mqtt.disconnect()
+        pass
+
+    if pir.value:
+        print("motion detected")
+        motion_detected()
 
     time.sleep(0.25)
