@@ -62,7 +62,6 @@ def on_connect(mqtt_client, userdata, flags, rc):
 def on_disconnect(mqtt_client, userdata, rc):
     # This method is called when the mqtt_client disconnects
     # from the broker.
-    logger.info("Disconnected from MQTT Broker!")
     logger.info(f"Disconnected from MQTT Broker!")
     counter = 0
     while counter <= 10:
