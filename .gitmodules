@@ -1,0 +1,3 @@
+[submodule "scad_libs/YAPP_Box"]
+	path = scad_libs/YAPP_Box
+	url = https://github.com/mrWheel/YAPP_Box.git
