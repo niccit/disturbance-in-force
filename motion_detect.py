@@ -8,7 +8,6 @@ import adafruit_minimqtt.adafruit_minimqtt
 from adafruit_minimqtt.adafruit_minimqtt import MMQTTException
 import adafruit_connection_manager
 import adafruit_logging
-import adafruit_ntp
 
 # --- Setup and Configuration --- #
 
@@ -134,20 +133,6 @@ def do_publish(feed, msg):
         except BrokenPipeError:
             my_mqtt.disconnect()
             my_mqtt.publish(feed, msg)
-
-def get_time():
-    try:
-        ntp_datetime = adafruit_ntp.NTP(pool, tz_offset=-10)
-        now = ntp_datetime.datetime
-        now_date = "{:02}{:02}{:04}".format(now.tm_mday, now.tm_mon, now.tm_year)
-        now_time = "{:02}:{:02}:{:02}".format(now.tm_hour, now.tm_min, now.tm_sec)
-        my_timestamp = f"{now_date}-{now_time}"
-    except OSError as e:
-        my_timestamp = "00000000-00:00:00"
-    except OverflowError as e:
-        my_timestamp = "00000000-00:00:00"
-
-    return my_timestamp
 
 def motion_detected():
     if not is_recording:
