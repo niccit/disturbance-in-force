@@ -4,3 +4,6 @@
 [submodule "threads-scad"]
 	path = threads-scad
 	url = https://github.com/rcolyer/threads-scad.git
+[submodule "circuitpy_helpers"]
+	path = circuitpy_helpers
+	url = https://github.com/niccit/circuitpy_helpers.git
