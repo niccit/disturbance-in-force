@@ -47,15 +47,15 @@ cutoutsBack = [
    ];
 
 cutoutsLeft = [
-   [3, -2, 11.42, 8.26, 0, yappRectangle]                // Power
-   ,[21.5, -2, 7, 7, 0, yappRectangle]                   // HDMI 0
-   ,[36.5, -2, 7, 7, 0, yappRectangle]                   // HDMI 1
+   [5, -2, 11.42, 8.26, 0, yappRectangle]                // Power
+   ,[23.5, -2, 7, 7, 0, yappRectangle]                   // HDMI 0
+   ,[38.5, -2, 7, 7, 0, yappRectangle]                   // HDMI 1
    ];
 
 cutoutsFront = [
-   [3, 0, 15, 24, 0, yappRectangle]                      // Ethernet
-   ,[22, 0, 14, 26, 0, yappRectangle]                     // High Speed USB
-   ,[40, 0, 14, 26, 0, yappRectangle]                     // High Speed USB
+   [3, 0, 15, 14, 0, yappRectangle]                      // Ethernet
+   ,[22, 0, 14, 15, 0, yappRectangle]                     // High Speed USB
+   ,[40, 0, 14, 15, 0, yappRectangle]                     // High Speed USB
    ];
 
 

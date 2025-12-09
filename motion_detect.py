@@ -32,22 +32,11 @@ while not connected:
     except ConnectionError:
         logger.error("Failed to connect to WiFi")
 
-# PIR Sensor
-pir = digitalio.DigitalInOut(board.GP1)
-pir.direction = digitalio.Direction.INPUT
-
-# Set up socket
+# --- MQTT --- #
+# Config
 radio = wifi.radio
 pool = adafruit_connection_manager.get_radio_socketpool(radio)
-
-# MQTT set up
-local_mqtt_broker = os.getenv("mqtt_local_server")
-local_mqtt_port = os.getenv("mqtt_local_port")
-local_mqtt_username = os.getenv("mqtt_local_username_motion")
-local_mqtt_password = os.getenv("mqtt_local_key_motion")
-
-motion_feed = os.getenv("motion_detect_local_feed")
-recording_feed = os.getenv("local_recording_on_feed")
+ssl_context = adafruit_connection_manager.get_radio_ssl_context(radio)
 
 # MQTT specific helpers
 def on_connect(mqtt_client, userdata, flags, rc):
@@ -98,7 +87,15 @@ def on_message(client, topic, message):
 
         logger.info(f"recording state={is_recording}")
 
-ssl_context = adafruit_connection_manager.get_radio_ssl_context(radio)
+# MQTT set up
+local_mqtt_broker = os.getenv("mqtt_local_server")
+local_mqtt_port = os.getenv("mqtt_local_port")
+local_mqtt_username = os.getenv("mqtt_local_username_motion")
+local_mqtt_password = os.getenv("mqtt_local_key_motion")
+
+# Feeds
+motion_feed = os.getenv("motion_detect_local_feed")
+recording_feed = os.getenv("local_recording_on_feed")
 
 my_mqtt = adafruit_minimqtt.adafruit_minimqtt.MQTT(
     broker=local_mqtt_broker
@@ -117,6 +114,11 @@ my_mqtt.on_subscribe = on_subscribe
 my_mqtt.on_unsubscribe = on_unsubscribe
 my_mqtt.on_publish = on_publish
 my_mqtt.on_message = on_message
+
+# --- PIR Sensor --- #
+pir = digitalio.DigitalInOut(board.GP1)
+pir.direction = digitalio.Direction.INPUT
+
 
 # --- Non-MQTT Related Methods --- #
 
