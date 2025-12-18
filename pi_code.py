@@ -111,6 +111,7 @@ def on_message(client, userdata, msg):
 # MQTT feeds for date and time - pub
 date_feed = os.getenv("DATE_FEED")
 time_feed = os.getenv("TIME_FEED")
+hour_feed = os.getenv("HOUR_FEED")
 
 # Get date from system clock
 # Store the date (1-31) and if the new query is different update the date to MQTT
@@ -128,13 +129,18 @@ def get_date():
 # Get the time from system clock
 # Update time to MQTT every minute
 stored_time = None
+stored_hour = None
 def get_time():
-    global stored_time
-    now_min, publish_time = timeHelper.get_current_time()
+    global stored_time, stored_hour
+    now_min, now_hour, publish_time = timeHelper.get_current_time(get_hour=True)
     if stored_time is None or stored_time != now_min:
         logger.debug("updating time on dashboard")
         do_publish(time_feed, publish_time, True)
         stored_time = now_min
+
+    if stored_hour is None or stored_hour != now_hour:
+        do_publish(hour_feed, now_hour, True)
+        stored_hour = now_hour
 
 # --- Weather, Air Quality, so2 (vog indicator) --- #
 
@@ -454,7 +460,13 @@ while True:
         wanCheck_counter = 0
         logger.info(f"wan state is {wan_state}")
 
+    mqtt_connected = pub_mqtt_client.is_connected()
+
     if wan_state:
+        if not mqtt_connected:
+            pub_mqtt_client.reconnect()
+            sub_mqtt_client.reconnect()
+
         get_time()
         get_date()
         get_weather()
