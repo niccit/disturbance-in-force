@@ -47,7 +47,7 @@ lores = {'size': (1920, 1080), 'format': 'YUV420'}
 capture = {'size': (1280, 720), 'format': 'YUV420'}
 fr_controls = ({'FrameRate': 30})
 # Live camera feed
-config = picam.create_video_configuration(main, controls=fr_controls, lores=lores, display="lores", transform=Transform(hflip=0, vflip=0))
+config = picam.create_video_configuration(main, controls=fr_controls, lores=lores, display="lores", transform=Transform(hflip=1, vflip=1))
 # Snap a picture on motion detect
 still_config = picam.create_still_configuration(main)
 
