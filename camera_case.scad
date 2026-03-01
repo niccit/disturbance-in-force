@@ -29,8 +29,8 @@ ridgeHeight = 5;
 ridgeSlack = 0.2;
 roundRadius = 0.5;
 
-standoffHeight = 5.0;
-standoffPinDiameter = 2;
+standoffHeight = 8.0;
+standoffPinDiameter = 2.5;
 standoffHoleSlack = 0.5;
 standoffDiameter = 4;
 
@@ -54,16 +54,16 @@ cutoutsRight =
 cutoutsLid =
    [
       [pcbWidth/2 + 8, pcbLength/2 - 25, 0, 0, 8, yappCircle]                    // Camera Lens
-      ,[pcbWidth/2 + 6.75, 8, 0, 0, 3, yappCircle]                            // Main board sensor
-      ,[pcbWidth/2 - 25, pcbLength/2 - 26, 0, 0, 9, yappCircle]                  // Back LED
-      ,[pcbWidth/2 - 9.5, 30.2, 0, 0, 3, yappCircle]                              // Back LED Sensor
-      ,[pcbWidth/2 + 39, pcbLength/2 - 26, 0, 0, 9, yappCircle]                  // Front LED
-      ,[pcbWidth/2 + 35, 15.5, 0, 0, 3, yappCircle]                            // Front LED Sensor
+      ,[pcbWidth/2 + 8, 7, 0, 0, 3, yappCircle]                            // Main board sensor
+      ,[pcbWidth/2 - 26, pcbLength/2 - 26.5, 0, 0, 10, yappCircle]                  // Back LED
+      ,[pcbWidth/2 - 7.5, 29, 0, 0, 3.5, yappCircle]                              // Back LED Sensor
+      ,[pcbWidth/2 + 38.5, pcbLength/2 - 26.5, 0, 0, 10, yappCircle]                  // Front LED
+      ,[pcbWidth/2 + 33, 16.5, 0, 0, 3.5, yappCircle]                            // Front LED Sensor
    ];
 
 snapJoins =
    [
-      [shellLength/4, 5, yappLeft, yappRight, yappSymmetric]
+      [shellLength/2, 5, yappLeft, yappRight, yappSymmetric]
       ,[shellWidth/2, 5, yappFront, yappBack, yappSymmetric]
    ];
 
