@@ -157,61 +157,65 @@ sunset_feed = os.getenv("SUNSET_FEED")
 # Gather all the weather and air quality data and format it into a report
 last_report = None
 info_spacer = '\u25AA'
-sunset_sent = False
 def get_weather():
     global last_report, sunset_sent
     degree_symbol = '\u00b0'
-    daylight = False
     if last_report is None or time.monotonic() > last_report + weather_report_wait:
-        weather_request = requests.get(weather_feed)
-        weather = weather_request.json()
-        condition = (weather["weather"][0]["description"])
-        temperature = (weather["main"]["temp"])
-        feels_like = (weather["main"]["feels_like"])
-        wind_speed = (weather["wind"]["speed"])
-        wind_direction = (weather["wind"]["deg"])
-        direction = get_wind_direction(wind_direction)
-        humidity = (weather["main"]["humidity"])
-        sunrise_unix = (weather["sys"]["sunrise"])
-        sunset_unix = (weather["sys"]["sunset"])
-        sunrise = timeHelper.format_time(sunrise_unix)
-        sunset  = timeHelper.format_time(sunset_unix)
-        air_quality, so2, so2_quality = get_air_quality()
-        pressure = (weather["main"]["pressure"])
-        pressure_indicator, publish_pressure, rain_indicator = get_pressure_info(pressure)
         try:
-            wind_gust = (weather["wind"]["gust"])
-            weather_for_dash = {"condition": f"{str(condition)}",
-                    "temperature": f"{str(int(temperature))}{degree_symbol}C feels like {int(feels_like)}{degree_symbol}",
-                    "wind": f"{str(wind_speed)} m/sec {direction}",
-                    "wind gust": f"{str(wind_gust)} m/sec",
-                    "humidity": f"{str(int(humidity))}%",
-                    "sunrise": f"{str(sunrise)}",
-                    "sunset": f"{str(sunset)}",
-                    "air quality": f"{str(air_quality)}",
-                    "vog": f"{float(so2)} {str(so2_quality)}",
-                    "pressure": f"{float(publish_pressure)} mmHg {pressure_indicator} {rain_indicator}",}
-        except KeyError:
-            weather_for_dash = {"condition": f"{str(condition)}",
-                    "temperature": f"{str(int(temperature))}{degree_symbol}C feels like {int(feels_like)}{degree_symbol}",
-                    "wind": f"{str(wind_speed)} m/sec {direction}",
-                    "humidity": f"{str(int(humidity))}%",
-                    "sunrise": f"{str(sunrise)}",
-                    "sunset": f"{str(sunset)}",
-                    "air quality": f"{str(air_quality)}",
-                    "vog": f"{float(so2)} {str(so2_quality)}",
-                    "pressure": f"{float(publish_pressure)} mmHg {pressure_indicator} {rain_indicator}",}
+            weather_request = requests.get(weather_feed)
+            weather = weather_request.json()
+            condition = (weather["weather"][0]["description"])
+            high_temp = (weather["main"]["temp_max"])
+            low_temp = (weather["main"]["temp_min"])
+            temperature = (weather["main"]["temp"])
+            feels_like = (weather["main"]["feels_like"])
+            wind_speed = (weather["wind"]["speed"])
+            wind_direction = (weather["wind"]["deg"])
+            direction = get_wind_direction(wind_direction)
+            humidity = (weather["main"]["humidity"])
+            sunrise_unix = (weather["sys"]["sunrise"])
+            sunset_unix = (weather["sys"]["sunset"])
+            sunrise = timeHelper.format_time(sunrise_unix)
+            sunset  = timeHelper.format_time(sunset_unix)
+            air_quality, so2, so2_quality = get_air_quality()
+            pressure = (weather["main"]["pressure"])
+            pressure_indicator, publish_pressure, rain_indicator = get_pressure_info(pressure)
+            try:
+                wind_gust = (weather["wind"]["gust"])
+                weather_for_dash = {"condition": f"{str(condition)}",
+                        "high_low": f"{str(int(high_temp))}{degree_symbol}C / {str(int(low_temp))}{degree_symbol}C",
+                        "temperature": f"{str(int(temperature))}{degree_symbol}C feels like {int(feels_like)}{degree_symbol}",
+                        "wind": f"{str(wind_speed)} m/sec {direction}",
+                        "wind gust": f"{str(wind_gust)} m/sec",
+                        "humidity": f"{str(int(humidity))}%",
+                        "sunrise": f"{str(sunrise)}",
+                        "sunset": f"{str(sunset)}",
+                        "air quality": f"{str(air_quality)}",
+                        "vog": f"{float(so2)} {str(so2_quality)}",
+                        "pressure": f"{float(publish_pressure)} mmHg {pressure_indicator} {rain_indicator}",}
+            except KeyError:
+                weather_for_dash = {"condition": f"{str(condition)}",
+                        "high_low": f"{str(int(high_temp))}{degree_symbol}C / {str(int(low_temp))}{degree_symbol}C",
+                        "temperature": f"{str(int(temperature))}{degree_symbol}C feels like {int(feels_like)}{degree_symbol}",
+                        "wind": f"{str(wind_speed)} m/sec {direction}",
+                        "humidity": f"{str(int(humidity))}%",
+                        "sunrise": f"{str(sunrise)}",
+                        "sunset": f"{str(sunset)}",
+                        "air quality": f"{str(air_quality)}",
+                        "vog": f"{float(so2)} {str(so2_quality)}",
+                        "pressure": f"{float(publish_pressure)} mmHg {pressure_indicator} {rain_indicator}",}
+                pass
+
+            sunset_hr, sunset_minute, sunset_second = sunset.split(":")
+            sunset_info = f"{sunset_hr}:{sunset_minute}"
+
+            logger.debug("updating weather report on dashboard")
+            do_publish(pub_weather_feed, json.dumps(weather_for_dash), True)
+            do_publish(sunset_feed, sunset_info, True)
+        except ConnectionError:
+            logger.error("Connection error trying to get the weather")
             pass
 
-
-        sunset_hr, sunset_minute, sunset_second = sunset.split(":")
-        sunset_info = f"{sunset_hr}:{sunset_minute}"
-
-        logger.debug("updating weather report on dashboard")
-        do_publish(pub_weather_feed, json.dumps(weather_for_dash), True)
-        if not sunset_sent:
-            do_publish(sunset_feed, sunset_info, True)
-            sunset_sent = True
         last_report = time.monotonic()
 
 
