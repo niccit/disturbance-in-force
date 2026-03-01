@@ -83,6 +83,7 @@ def on_message(client, topic, message):
                 is_recording = True
         if message is "0":
             if is_recording:
+                do_publish(motion_feed, 0)
                 is_recording = False
 
         logger.info(f"recording state={is_recording}")
@@ -116,12 +117,15 @@ my_mqtt.on_publish = on_publish
 my_mqtt.on_message = on_message
 
 # --- PIR Sensor --- #
-pir = digitalio.DigitalInOut(board.GP1)
+sensor = board.D2
+logger.info(f"sensor is on pin {sensor}")
+pir = digitalio.DigitalInOut(sensor)
 pir.direction = digitalio.Direction.INPUT
-
+pir.pull = digitalio.Pull.UP
 
 # --- Non-MQTT Related Methods --- #
 
+# Handle all MQTT publish requests
 def do_publish(feed, msg):
     if testing:
         logger.info(f"Testing: would publish {msg} to {feed}")
@@ -135,23 +139,27 @@ def do_publish(feed, msg):
         except BrokenPipeError:
             my_mqtt.disconnect()
             my_mqtt.publish(feed, msg)
+            pass
+        except OSError:
+            my_mqtt.disconnect()
+            my_mqtt.publish(feed, msg)
+            pass
 
+# Notify the camera that motion has been detected
 def motion_detected():
     if not is_recording:
         logger.info(f"motion detected and we are not currently recording")
         do_publish(motion_feed, 1)
-        time.sleep(5)
-        do_publish(motion_feed, 0)
     else:
         logger.info(f"we are recording, nothing more to do")
 
+
 # --- Pre start setup --- #
 my_mqtt.connect()
-
 do_publish(motion_feed, 0)
+logger.info("motion detector online")
 
 # --- Startup --- #
-logger.info("motion detector online")
 while True:
     try:
         my_mqtt.loop(timeout=5)
@@ -161,7 +169,4 @@ while True:
         pass
 
     if pir.value:
-        print("motion detected")
         motion_detected()
-
-    time.sleep(0.25)
