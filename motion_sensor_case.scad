@@ -11,11 +11,16 @@ include <scad_libs/YAPP_Box/YAPPgenerator_v3.scad>
 printBaseShell = true;
 printLidShell = true;
 
-// RaspberryPi Pico
-// 51m, 21mm, 1mm per https://www.adafruit.com/product/5526
+// Using these measurments to support the PIR sensor
 pcbLength = 51;
 pcbWidth = 32.34;
 pcbThickness = 1;
+
+// Seeed Studio XAIO ESP32-S3
+// 21, 17.8, 1mm per https://www.seeedstudio.com/XIAO-ESP32S3-p-5627.html
+seeedLength = 21;
+seeedWidth = 17.8;
+seeedThickness = 1;
 
 // Sensor
 // sensor diam 22.72
@@ -47,24 +52,18 @@ standoffDiameter = 4;
 
 pcbStands =
    [
-      [3, 10.5, yappHole, yappBaseOnly, yappSelfThreading]
-      ,[51, 10.5, yappHole, yappBaseOnly, yappSelfThreading]
-      ,[3, 22.5, yappHole, yappBaseOnly, yappSelfThreading]
-      ,[51, 22.5, yappHole, yappBaseOnly, yappSelfThreading]
-      ,[11.75, shellWidth/2-3.5, 25, yappHole, yappLidOnly, yappSelfThreading, yappNoFillet]
-      ,[41.75, shellWidth/2-3.5, 25, yappHole, yappLidOnly, yappSelfThreading, yappNoFillet]
+      [11.75, shellWidth/2-3.5, 25, yappHole, yappLidOnly, yappSelfThreading, yappNoFillet]       // Back
+      ,[41.75, shellWidth/2-3.5, 25, yappHole, yappLidOnly, yappSelfThreading, yappNoFillet]       // Front
    ];
 
 cutoutsBack =
    [
-      [pcbWidth/2-5, 0, 10, 6.4, 0, yappRectangle]
+      [pcbWidth/2-5, -2, 10, 6.4, 0, yappRectangle]
    ];
 
 cutoutsLid =
    [
       [shellLength/2-15, shellWidth/2-15.5, 0, 0, 12, yappCircle]    // PIR cut out
-//      ,[9, shellWidth/2-5, 0, 0, 1.5, yappCircle]                    // Back mounting hole
-//      ,[39, shellWidth/2-5, 0, 0, 1.5, yappCircle]
    ];
 
 boxMounts =
@@ -75,11 +74,26 @@ boxMounts =
 
 snapJoins =
    [
-      [shellLength/4, 5, yappLeft, yappRight, yappSymmetric]
+      [shellLength/2, 5, yappLeft, yappRight, yappSymmetric]
       ,[shellWidth/2, 5, yappFront, yappBack, yappSymmetric]
    ];
 
+// If no headers are being used translate should be [0, 0, 1.5], add to the inner cube height is 0.5
+//     and the board will snap in
+// If headers are being used short side down, I would recommend [0, 0, 3] or [0, 0, 3.5]
+//    and an add of 2 to the inner cube height
+// My print used [0, 0, 2.5] with an add of 2 to the inner cube height and I didn't get the board to snap in,
+//     however, the wires connecting it to the sensor keep it in place
+module board_mount() {
+   difference() {
+      cube([seeedLength + 2, seeedWidth + 1.2, 5], center=true);
+      translate([0, 0, 1.5])
+         cube([seeedLength + 0.5, seeedWidth + 0.5, seeedThickness + 0.5], center=true);
+   }
+}
+
 
 YAPPgenerate();
-
+translate([14,20,4-0.003])
+   board_mount();
 
