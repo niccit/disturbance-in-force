@@ -32,22 +32,11 @@ while not connected:
     except ConnectionError:
         logger.error("Failed to connect to WiFi")
 
-# PIR Sensor
-pir = digitalio.DigitalInOut(board.GP1)
-pir.direction = digitalio.Direction.INPUT
-
-# Set up socket
+# --- MQTT --- #
+# Config
 radio = wifi.radio
 pool = adafruit_connection_manager.get_radio_socketpool(radio)
-
-# MQTT set up
-local_mqtt_broker = os.getenv("mqtt_local_server")
-local_mqtt_port = os.getenv("mqtt_local_port")
-local_mqtt_username = os.getenv("mqtt_local_username_motion")
-local_mqtt_password = os.getenv("mqtt_local_key_motion")
-
-motion_feed = os.getenv("motion_detect_local_feed")
-recording_feed = os.getenv("local_recording_on_feed")
+ssl_context = adafruit_connection_manager.get_radio_ssl_context(radio)
 
 # MQTT specific helpers
 def on_connect(mqtt_client, userdata, flags, rc):
@@ -94,11 +83,20 @@ def on_message(client, topic, message):
                 is_recording = True
         if message is "0":
             if is_recording:
+                do_publish(motion_feed, 0)
                 is_recording = False
 
         logger.info(f"recording state={is_recording}")
 
-ssl_context = adafruit_connection_manager.get_radio_ssl_context(radio)
+# MQTT set up
+local_mqtt_broker = os.getenv("mqtt_local_server")
+local_mqtt_port = os.getenv("mqtt_local_port")
+local_mqtt_username = os.getenv("mqtt_local_username_motion")
+local_mqtt_password = os.getenv("mqtt_local_key_motion")
+
+# Feeds
+motion_feed = os.getenv("motion_detect_local_feed")
+recording_feed = os.getenv("local_recording_on_feed")
 
 my_mqtt = adafruit_minimqtt.adafruit_minimqtt.MQTT(
     broker=local_mqtt_broker
@@ -118,8 +116,16 @@ my_mqtt.on_unsubscribe = on_unsubscribe
 my_mqtt.on_publish = on_publish
 my_mqtt.on_message = on_message
 
+# --- PIR Sensor --- #
+sensor = board.D2
+logger.info(f"sensor is on pin {sensor}")
+pir = digitalio.DigitalInOut(sensor)
+pir.direction = digitalio.Direction.INPUT
+pir.pull = digitalio.Pull.UP
+
 # --- Non-MQTT Related Methods --- #
 
+# Handle all MQTT publish requests
 def do_publish(feed, msg):
     if testing:
         logger.info(f"Testing: would publish {msg} to {feed}")
@@ -133,23 +139,27 @@ def do_publish(feed, msg):
         except BrokenPipeError:
             my_mqtt.disconnect()
             my_mqtt.publish(feed, msg)
+            pass
+        except OSError:
+            my_mqtt.disconnect()
+            my_mqtt.publish(feed, msg)
+            pass
 
+# Notify the camera that motion has been detected
 def motion_detected():
     if not is_recording:
         logger.info(f"motion detected and we are not currently recording")
         do_publish(motion_feed, 1)
-        time.sleep(5)
-        do_publish(motion_feed, 0)
     else:
         logger.info(f"we are recording, nothing more to do")
 
+
 # --- Pre start setup --- #
 my_mqtt.connect()
-
 do_publish(motion_feed, 0)
+logger.info("motion detector online")
 
 # --- Startup --- #
-logger.info("motion detector online")
 while True:
     try:
         my_mqtt.loop(timeout=5)
@@ -159,7 +169,4 @@ while True:
         pass
 
     if pir.value:
-        print("motion detected")
         motion_detected()
-
-    time.sleep(0.25)

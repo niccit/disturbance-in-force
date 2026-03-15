@@ -5,3 +5,7 @@
 /.env_driveway_cam
 /.env_pihub
 /scad_libs/
+/garage-sensor_settings.toml
+/motion-detect_settings.toml
+/camera_case.fpp
+/motion_sensor_case.fpp

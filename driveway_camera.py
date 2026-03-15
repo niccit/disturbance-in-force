@@ -35,7 +35,7 @@ testing = False
 storage = "local"
 
 # --- Pi Camera Setup --- #
-tuning = Picamera2.load_tuning_file("imx219_noir.json")
+tuning = Picamera2.load_tuning_file("/usr/share/libcamera/ipa/rpi/vc4/ov5647_noir.json")
 picam = Picamera2(tuning=tuning)
 # Video file name - use the same one and overwrite
 tmp_video = "temp_video"
@@ -45,9 +45,9 @@ filename = tmp_video + "." + video_encoding
 main = {'size': (1920, 1080), 'format': 'YUV420'}
 lores = {'size': (1920, 1080), 'format': 'YUV420'}
 capture = {'size': (1280, 720), 'format': 'YUV420'}
-controls = ({'FrameRate': 30})
+fr_controls = ({'FrameRate': 30})
 # Live camera feed
-config = picam.create_video_configuration(main, controls=controls, lores=lores, display="lores", transform=Transform(hflip=0, vflip=0))
+config = picam.create_video_configuration(main, controls=fr_controls, lores=lores, display="lores", transform=Transform(hflip=1, vflip=1))
 # Snap a picture on motion detect
 still_config = picam.create_still_configuration(main)
 
