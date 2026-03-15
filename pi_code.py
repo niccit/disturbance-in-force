@@ -411,29 +411,6 @@ def get_pressure_info(pressure):
     stored_pressure_indicator = indicator
     return indicator, publish_pressure, rain
 
-
-# If the time is after 8PM and the garage door is still in an open state
-# Email me so that I know to close it, just in case I don't look at the home hub
-notified = False
-close_time = os.getenv("GARAGE_ALERT_TIME")
-garage_door_state = "closed"
-def monitor_garage_notification():
-    global notified, close_time
-    cur_min, now = timeHelper.get_current_time()
-
-    # Publish that the garage door is open after 20:00
-    # This will send an email alerting the need to close the door
-    if "open" in garage_door_state:
-        if now > close_time and not notified:
-            do_publish(garage_notice, 1)
-            notified = True
-
-    # If time is not within the hours door should be closed
-    # Reset to notified to False
-    if now < close_time and notified:
-        logger.info("resetting close garage notification status")
-        notified = False
-
 # --- The magic begins here --- #
 
 # Log a message indicating if we're in test mode
