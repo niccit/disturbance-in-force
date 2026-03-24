@@ -43,13 +43,13 @@ pcbStands = [
    ];
 
 cutoutsBack = [
-   [22, -7, 11, 5, 0, yappRectangle]                     // SD card slot
+   [19.5, -5, 15, 5, 0, yappRectangle]                     // SD card slot
    ];
 
 cutoutsLeft = [
-   [5, -2, 11.42, 8.26, 0, yappRectangle]                // Power
-   ,[23.5, -2, 7, 7, 0, yappRectangle]                   // HDMI 0
-   ,[38.5, -2, 7, 7, 0, yappRectangle]                   // HDMI 1
+   [5.5, -2, 11.42, 8.26, 0, yappRectangle]                // Power
+   ,[19.75, -2, 12, 7, 0, yappRectangle]                   // HDMI 0
+   ,[33.5, -2, 12, 7, 0, yappRectangle]                   // HDMI 1
    ];
 
 cutoutsFront = [
@@ -58,6 +58,18 @@ cutoutsFront = [
    ,[40, 0, 14, 15, 0, yappRectangle]                     // High Speed USB
    ];
 
+cutoutsBase = [
+    [85 / 2, 56 / 2, 50, 30, 20, yappCircle, maskOffsetBars, yappCenter]
+    ];
+
+snapJoins = [
+    [shellLength / 2, 5, yappLeft, yappRight, yappSymmetric, yappRectangle]
+   ,[shellWidth / 2, 5, yappFront, yappBack, yappSymmetric, yappRectangle]
+    ];
+
+labelsPlane = [
+   [47, 30, 180, 2, yappLid, "Henny Penny:style=bold", 8, "No Touch The Pi", 0, yappTextLeftToRight, yappTextHAlignCenter, yappTextVAlignCenter]
+   ];
 
 
 YAPPgenerate();
