@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: MIT
 import os
 import time
+import alarm.pin
 import board
 import digitalio
 import wifi
@@ -98,11 +99,16 @@ my_mqtt.on_disconnect = on_disconnect
 my_mqtt.on_subscribe = on_subscribe
 
 # --- Garage Door Sensor --- #
-garage_door_sensor=digitalio.DigitalInOut(board.A3)
-garage_door_sensor.direction = digitalio.Direction.INPUT
-garage_door_sensor.pull = digitalio.Pull.UP
-garage_door_switch = Debouncer(garage_door_sensor)
-door_check_wait = 20 # 1800
+sensor_pin = board.A3
+
+def set_up_sensor():
+    garage_door_sensor = digitalio.DigitalInOut(sensor_pin)
+    garage_door_sensor.direction = digitalio.Direction.INPUT
+    garage_door_sensor.pull = digitalio.Pull.UP
+    garage_door_switch = Debouncer(garage_door_sensor)
+
+    return garage_door_sensor
+
 
 # Publish messages to MQTT broker(s) or debug log if testing
 def do_publish(feed, msg, retain=False):
@@ -118,12 +124,18 @@ def do_publish(feed, msg, retain=False):
 # Pre-launch start up
 last_known_state = False
 startup = True
+check_time = None
+door_check_wait = 20 # 1800
+garage_door_sensor = None
+status = 2
 my_mqtt.connect()
 logger.info("Garage door sensor online")
 
 # Main
 while True:
-    status = garage_door_sensor.value
+    if garage_door_sensor is None:
+        garage_door_sensor = set_up_sensor()
+        status = garage_door_sensor.value
 
     try:
         my_mqtt.loop(timeout=5)
@@ -144,6 +156,13 @@ while True:
     else:
         logger.debug("Nothing has changed, not publishing to MQTT")
 
-    time.sleep(door_check_wait)
+    if garage_door_sensor is not None:
+        garage_door_sensor.deinit()
+        garage_door_sensor = None
+    sleep_alarm = alarm.pin.PinAlarm(sensor_pin, value=False, edge=False)
+    check_time = time.monotonic()
+    logger.info(f"going into light sleep at {check_time}")
+    alarm.light_sleep_until_alarms(sleep_alarm)
+
 
 
