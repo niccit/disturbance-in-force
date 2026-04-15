@@ -40,7 +40,7 @@ standoffHoleSlack = 0.5;
 standoffDiameter = 2;
 
 cutoutsBack = [
-   [4, -7.5, 10, 7.5, 2, yappRoundedRect]
+   [3, -7.5, 12, 7.5, 2, yappRoundedRect]
 ];
 
 boxMounts = [
