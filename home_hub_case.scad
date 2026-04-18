@@ -1,3 +1,4 @@
+use <garage_sensor_case.scad>
 // SPDX-License-Identifier: MIT
 $fa = 1;
 $fs = 0.4;
@@ -16,15 +17,15 @@ pcbThickness = 1.6;
 
 paddingFront = 4;
 paddingBack = 2;
-paddingRight = 1;
+paddingRight = 4;
 paddingLeft = 3;
 
 wallThickness = 1.5;
 basePlaneThickness = 1.5;
 lidPlaneThickness = 1.5;
 
-baseWallHeight = 20;
-lidWallHeight = 18;
+baseWallHeight = 10;
+lidWallHeight = 15;
 
 ridgeHeight = 5;
 ridgeSlack = 0.2;
@@ -35,27 +36,17 @@ standoffPinDiameter = 2;
 standoffHoleSlack = 0.5;
 standoffDiameter = 4;
 
-pcbStands = [
-   [3, 3, yappHole, yappBaseOnly, yappSelfThreading]     // back left
-   ,[3, 52, yappHole, yappBaseOnly, yappSelfThreading]   // back right
-   ,[61, 3, yappHole, yappBaseOnly, yappSelfThreading]   // front left
-   ,[61, 52, yappHole, yappBaseOnly, yappSelfThreading]  // front right
-   ];
-
 cutoutsBack = [
-   [19.5, -5, 15, 5, 0, yappRectangle]                     // SD card slot
+   [20.5, -6.5, 15, 5, 0, yappRectangle]                     // SD card slot
    ];
 
 cutoutsLeft = [
-   [5.5, -2, 11.42, 8.26, 0, yappRectangle]                // Power
-   ,[19.75, -2, 12, 7, 0, yappRectangle]                   // HDMI 0
-   ,[33.5, -2, 12, 7, 0, yappRectangle]                   // HDMI 1
+   [6.5, -3, 11.42, 8.26, 0, yappRectangle]                // Power
+   ,[20.25, -3, 25.5, 7, 0, yappRectangle]                   // HDMI 0 & 1
    ];
 
 cutoutsFront = [
-   [3, 0, 15, 14, 0, yappRectangle]                      // Ethernet
-   ,[22, 0, 14, 15, 0, yappRectangle]                     // High Speed USB
-   ,[40, 0, 14, 15, 0, yappRectangle]                     // High Speed USB
+   [3.5, -1.75, 50.6, 16, 0, yappRectangle]                      // Ethernet, USB
    ];
 
 cutoutsBase = [
@@ -63,15 +54,34 @@ cutoutsBase = [
     ];
 
 snapJoins = [
-    [shellLength / 2, 5, yappLeft, yappRight, yappSymmetric, yappRectangle]
-   ,[shellWidth / 2, 5, yappFront, yappBack, yappSymmetric, yappRectangle]
+    [shellLength, 5, yappLeft, yappRight, yappSymmetric, yappRectangle]
+   ,[shellWidth, 5, yappFront, yappBack, yappSymmetric, yappRectangle]
     ];
 
 labelsPlane = [
    [47, 30, 180, 2, yappLid, "Henny Penny:style=bold", 8, "No Touch The Pi", 0, yappTextLeftToRight, yappTextHAlignCenter, yappTextVAlignCenter]
    ];
 
+module secure_board() {
+   difference() {
+        cube([pcbLength + 2, pcbWidth + 2, 6.5], center=true);
+        translate([0,  0, 0])
+            color("blue")cube([pcbLength + 0.3, (pcbWidth) + 0.3, 6.5], center=true);
+        translate([(pcbLength / 2), 0, 0])
+            color("red")cube([3, pcbWidth - 4, 6.5], center=true);
+        translate([(-pcbLength / 2), 0, 0])
+            color("red")cube([3, pcbWidth - 10, 6.5], center=true);
+        translate([0, (pcbWidth / 2), 0])
+            color("green")cube([pcbLength - 10, 3, 6.5], center=true);
+        translate([0, - (pcbWidth / 2), 0])
+            color("green")cube([pcbLength - 10, 3, 6.5], center=true);
+   }
+}
+
+module baseHookInside() {
+    translate([pcbLength / 2 + 3.5, pcbWidth / 2 + 5, 3.5 - 0.01])
+        secure_board();
+}
 
 YAPPgenerate();
-
-
+baseHookInside();
