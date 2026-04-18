@@ -28,7 +28,7 @@ basePlaneThickness = 1.5;
 lidPlaneThickness = 1.5;
 
 baseWallHeight = 5;
-lidWallHeight = 5;
+lidWallHeight = 8;
 
 ridgeHeight = 4;
 ridgeSlack = 0.2;
