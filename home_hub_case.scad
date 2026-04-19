@@ -31,22 +31,22 @@ ridgeHeight = 5;
 ridgeSlack = 0.2;
 roundRadius = 2;
 
-standoffHeight = 5.0;
+standoffHeight = 4;
 standoffPinDiameter = 2;
 standoffHoleSlack = 0.5;
 standoffDiameter = 4;
 
 cutoutsBack = [
-   [20.5, -6.5, 15, 5, 0, yappRectangle]                     // SD card slot
+   [20.5, -5, 15, 5, 0, yappRectangle]                     // SD card slot
    ];
 
 cutoutsLeft = [
-   [6.5, -3, 11.42, 8.26, 0, yappRectangle]                // Power
-   ,[20.25, -3, 25.5, 7, 0, yappRectangle]                   // HDMI 0 & 1
+   [5, -2, 11.42, 8.26, 0, yappRectangle]                // Power
+   ,[19.75, -2, 25.5, 8, 0, yappRectangle]                   // HDMI 0 & 1
    ];
 
 cutoutsFront = [
-   [3.5, -1.75, 50.6, 16, 0, yappRectangle]                      // Ethernet, USB
+   [3.5, 1, 50.6, 16, 0, yappRectangle]                      // Ethernet, USB
    ];
 
 cutoutsBase = [
@@ -62,6 +62,10 @@ labelsPlane = [
    [47, 30, 180, 2, yappLid, "Henny Penny:style=bold", 8, "No Touch The Pi", 0, yappTextLeftToRight, yappTextHAlignCenter, yappTextVAlignCenter]
    ];
 
+
+// Module to snap fit board to base
+// Set printPCBStands to false if you don't have an active cooler installed
+printPCBStands = true;
 module secure_board() {
    difference() {
         cube([pcbLength + 2, pcbWidth + 2, 6.5], center=true);
@@ -78,10 +82,28 @@ module secure_board() {
    }
 }
 
+// Custom PCB stands to balance the board in the case when an active cooloer is installed
+module custom_pcb() {
+    standoffBaseDiam = (standoffDiameter + 2);
+    cylinder(h=standoffHeight, d1=standoffBaseDiam, d2=standoffDiameter);
+}
+
+// YAPP_Box Hook
 module baseHookInside() {
-    translate([pcbLength / 2 + 3.5, pcbWidth / 2 + 5, 3.5 - 0.01])
-        secure_board();
+    union() {
+        translate([pcbLength / 2 + 3, pcbWidth / 2 + 5, 3.5 - 0.01])
+            secure_board();
+        if (printPCBStands == true) {
+            translate([(pcbLength - 16), (-pcbWidth / 2) + 39, 0.5 - 0.01])   // Front
+                color("purple")custom_pcb();
+            translate([-(pcbLength / 2) + 50, (pcbWidth), 0.5 - 0.01])        // Rear
+                color("purple")custom_pcb();
+        }
+    }
 }
 
 YAPPgenerate();
-baseHookInside();
+// We don't want to see the hook if we're only printing the lid
+if(printBaseShell == true) {
+    baseHookInside();
+}
