@@ -1,5 +1,5 @@
-use <garage_sensor_case.scad>
 // SPDX-License-Identifier: MIT
+// Case/enclosure for Raspberry Pi 5 with or without active cooler
 $fa = 1;
 $fs = 0.4;
 
@@ -7,7 +7,7 @@ include <scad_libs/YAPP_Box/YAPPgenerator_v3.scad>
 
 // --- YAPP setup --- //
 
-printBaseShell = true;
+printBaseShell = false;
 printLidShell = true;
 
 // Length and width from https://datasheets.raspberrypi.com/rpi5/raspberry-pi-5-mechanical-drawing.pdf

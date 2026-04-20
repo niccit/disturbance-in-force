@@ -1,12 +1,11 @@
-use <garage_sensor_case.scad>
 // OpenSCAD file
 // Created: 3/27/26
+// Case/enclosure for Seeed Studio XIAO board
 
 $fn = 50; // Circle resolution
 $fs = 0.4;
 
 include <scad_libs/YAPP_Box/YAPPgenerator_v3.scad>
-
 
 // --- YAPP setup --- //
 
