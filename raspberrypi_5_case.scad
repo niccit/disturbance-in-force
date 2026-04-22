@@ -7,7 +7,7 @@ include <scad_libs/YAPP_Box/YAPPgenerator_v3.scad>
 
 // --- YAPP setup --- //
 
-printBaseShell = false;
+printBaseShell = true;
 printLidShell = true;
 
 // Length and width from https://datasheets.raspberrypi.com/rpi5/raspberry-pi-5-mechanical-drawing.pdf
@@ -37,7 +37,7 @@ standoffHoleSlack = 0.5;
 standoffDiameter = 4;
 
 cutoutsBack = [
-   [20.5, -5, 15, 5, 0, yappRectangle]                     // SD card slot
+   [19.5, -5.5, 15, 5, 0, yappRectangle]                     // SD card slot
    ];
 
 cutoutsLeft = [
@@ -46,7 +46,7 @@ cutoutsLeft = [
    ];
 
 cutoutsFront = [
-   [3.5, 1, 50.6, 16, 0, yappRectangle]                      // Ethernet, USB
+   [2.5, 0.5, 50.6, 16, 0, yappRectangle]                      // Ethernet, USB
    ];
 
 cutoutsBase = [
@@ -91,12 +91,12 @@ module custom_pcb() {
 // YAPP_Box Hook
 module baseHookInside() {
     union() {
-        translate([pcbLength / 2 + 3, pcbWidth / 2 + 5, 3.5 - 0.01])
+        translate([pcbLength / 2 + 3, pcbWidth / 2 + 3.5, 3.5 - 0.01])
             secure_board();
         if (printPCBStands == true) {
-            translate([(pcbLength - 16), (-pcbWidth / 2) + 39, 0.5 - 0.01])   // Front
+            translate([(pcbLength - 16), (-pcbWidth / 2) + 38, 0.5 - 0.01])   // Front
                 color("purple")custom_pcb();
-            translate([-(pcbLength / 2) + 50, (pcbWidth), 0.5 - 0.01])        // Rear
+            translate([-(pcbLength / 2) + 49.5, (pcbWidth), 0.5 - 0.01])        // Rear
                 color("purple")custom_pcb();
         }
     }
