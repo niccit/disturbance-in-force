@@ -153,7 +153,7 @@ air_quality_feed = f"https://api.openweathermap.org/data/2.5/air_pollution?lat="
 # MQTT feeds for publishing data to dashboard - pub
 pub_weather_feed = os.getenv("WEATHER_FEED")
 sunset_feed = os.getenv("SUNSET_FEED")
-remsunrise_feed = os.getenv("SUNRISE_FEED")
+sunrise_feed = os.getenv("SUNRISE_FEED")
 
 # Gather all the weather and air quality data and format it into a report
 last_report = None
