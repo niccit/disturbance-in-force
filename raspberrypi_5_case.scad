@@ -7,7 +7,7 @@ include <scad_libs/YAPP_Box/YAPPgenerator_v3.scad>
 
 // --- YAPP setup --- //
 
-printBaseShell = true;
+printBaseShell = false;
 printLidShell = true;
 
 // Length and width from https://datasheets.raspberrypi.com/rpi5/raspberry-pi-5-mechanical-drawing.pdf
@@ -68,17 +68,17 @@ labelsPlane = [
 printPCBStands = true;
 module secure_board() {
    difference() {
-        cube([pcbLength + 2, pcbWidth + 2, 6.5], center=true);
+        cube([pcbLength + 2, pcbWidth + 2, 7], center=true);
         translate([0,  0, 0])
-            color("blue")cube([pcbLength + 0.3, (pcbWidth) + 0.3, 6.5], center=true);
+            color("blue")cube([pcbLength + 0.3, (pcbWidth) + 0.3, 7], center=true);
         translate([(pcbLength / 2), 0, 0])
-            color("red")cube([3, pcbWidth - 4, 6.5], center=true);
+            color("red")cube([3, pcbWidth - 4, 7], center=true);
         translate([(-pcbLength / 2), 0, 0])
-            color("red")cube([3, pcbWidth - 10, 6.5], center=true);
+            color("red")cube([3, pcbWidth - 10, 7], center=true);
         translate([0, (pcbWidth / 2), 0])
-            color("green")cube([pcbLength - 10, 3, 6.5], center=true);
+            color("green")cube([pcbLength - 10, 3, 7], center=true);
         translate([0, - (pcbWidth / 2), 0])
-            color("green")cube([pcbLength - 10, 3, 6.5], center=true);
+            color("green")cube([pcbLength - 10, 3, 7], center=true);
    }
 }
 
@@ -91,7 +91,7 @@ module custom_pcb() {
 // YAPP_Box Hook
 module baseHookInside() {
     union() {
-        translate([pcbLength / 2 + 3, pcbWidth / 2 + 3.5, 3.5 - 0.01])
+        translate([pcbLength / 2 + 3, pcbWidth / 2 + 3.5, 4 - 0.01])
             secure_board();
         if (printPCBStands == true) {
             translate([(pcbLength - 16), (-pcbWidth / 2) + 38, 0.5 - 0.01])   // Front
