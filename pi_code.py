@@ -153,12 +153,13 @@ air_quality_feed = f"https://api.openweathermap.org/data/2.5/air_pollution?lat="
 # MQTT feeds for publishing data to dashboard - pub
 pub_weather_feed = os.getenv("WEATHER_FEED")
 sunset_feed = os.getenv("SUNSET_FEED")
+remsunrise_feed = os.getenv("SUNRISE_FEED")
 
 # Gather all the weather and air quality data and format it into a report
 last_report = None
 info_spacer = '\u25AA'
 def get_weather():
-    global last_report, sunset_sent
+    global last_report
     degree_symbol = '\u00b0'
     if last_report is None or time.monotonic() > last_report + weather_report_wait:
         try:
@@ -208,10 +209,13 @@ def get_weather():
 
             sunset_hr, sunset_minute, sunset_second = sunset.split(":")
             sunset_info = f"{sunset_hr}:{sunset_minute}"
+            sunrise_hr, sunrise_minute, sunrise_second = sunrise.split(":")
+            sunrise_info = f"{sunrise_hr}:{sunrise_minute}"
 
             logger.debug("updating weather report on dashboard")
             do_publish(pub_weather_feed, json.dumps(weather_for_dash), True)
             do_publish(sunset_feed, sunset_info, True)
+            do_publish(sunrise_feed, sunrise_info, True)
         except ConnectionError:
             logger.error("Connection error trying to get the weather")
             pass
