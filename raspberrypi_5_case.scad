@@ -7,7 +7,7 @@ include <scad_libs/YAPP_Box/YAPPgenerator_v3.scad>
 
 // --- YAPP setup --- //
 
-printBaseShell = false;
+printBaseShell = true;
 printLidShell = true;
 
 // Length and width from https://datasheets.raspberrypi.com/rpi5/raspberry-pi-5-mechanical-drawing.pdf
