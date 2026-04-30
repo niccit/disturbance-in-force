@@ -89,7 +89,7 @@ module custom_pcb() {
 }
 
 // YAPP_Box Hook
-module baseHookInside() {
+module hookBaseInside() {
     union() {
         translate([pcbLength / 2 + 3, pcbWidth / 2 + 3.5, 4 - 0.01])
             secure_board();
@@ -103,7 +103,3 @@ module baseHookInside() {
 }
 
 YAPPgenerate();
-// We don't want to see the hook if we're only printing the lid
-if(printBaseShell == true) {
-    baseHookInside();
-}
